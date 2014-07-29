@@ -2,7 +2,7 @@
 
 BK_PATH='/backup/db_dumps_mysql/';
 MYSQL_DUMP_BIN='/usr/bin/mysqldump';
-DB_TYPE='mysql-5.1';
+DB_TYPE='mysql-5.5';
 CONFIG='/root/.my.cnf';
 KEEP=2; # KEEP how many days
 # those dbs have to be dropped with skip locks (single transaction)
@@ -27,6 +27,12 @@ fi;
 if [ -d $BK_PATH ];
 then
 	echo Starting at `date "+%Y-%m-%d %H:%M:%S"`
+	# get the hostname from the my cnf file, if not set use localhost
+	hostname=`cat /root/.my.rds.swjevent.conf |grep host|cut -d "=" -f 2|sed -e 's/"//g'`;
+	if [ -z "$hostname" ];
+	then
+		hostname='localhost';
+	fi;
 	echo "Backup All MySQL DBs ...";
 	/usr/bin/mysql --defaults-extra-file=$CONFIG -B -N -e "show databases" | while read db
 	do
@@ -41,7 +47,7 @@ then
 		done;
 		if [ $exclude -eq 0 ];
 		then
-			filename=$BK_PATH"db_"$DB_TYPE"_"$db"_bk_"`date +%Y%m%d`"_"`date +%H%M`"_01.sql";
+			filename=$BK_PATH"db_"$DB_TYPE"_"$db"_"$hostname"_"`date +%Y%m%d`"_"`date +%H%M`"_01.sql";
 			echo "+ Backing up $db into $filename"
 			# lock check
 			nolock='';
@@ -71,7 +77,7 @@ then
 	echo Ended at `date "+%Y-%m-%d %H:%M:%S"`
 	echo "finished";
 	echo "Cleanup older than $KEEP days backups in $BK_PATH";
-	find $BK_PATH -mtime +$KEEP -name "*_${DB_TYPE}_*_bk_*.sql*" -delete -print;
+	find $BK_PATH -mtime +$KEEP -name "*_${DB_TYPE}_*_*_*.sql*" -delete -print;
 else
 	echo "Backup path $BK_PATH not found";
 fi
