@@ -21,9 +21,10 @@ VERBOSE='--partial';
 EXT_ATTRS='';
 LOG_FILE="/var/log/rsync/rsync_backup.log";
 _LOG_FILE='';
+CHECK=1;
 
 # set options
-while getopts ":vxs:t:l:h" opt
+while getopts ":vcxs:t:l:h" opt
 do
     case $opt in
         v|verbose)
@@ -33,16 +34,19 @@ do
         x|extattr)
             EXT_ATTRS='-X';
             ;;
+		c|check)
+			CHECK=0;
+			;;
         s|source)
             if [ -z "$SOURCE" ];
 			then
-				SOURCE=$OPTARG;
+				SOURCE="$OPTARG";
 			fi;
             ;;
         t|target)
             if [ -z "$TARGET" ];
 			then
-				TARGET=$OPTARG;
+				TARGET="$OPTARG";
 			fi;
             ;;
         l|logfile)
@@ -76,23 +80,33 @@ then
 	fi;
 fi;
 
-if [[ ! -d $SOURCE || ! -d $TARGET ]];
+echo "S: $SOURCE | T: $TARGET";
+if [ $CHECK -eq 1 ];
 then
-	echo "Give source and target path.";
-	if [ ! -z $SOURCE ] && [ ! -d $SOURCE ];
+	if [[ ! -d "$SOURCE" || ! -d "$TARGET" ]];
 	then
-		echo "Source folder not found: $SOURCE";
+		echo "Give source and target path.";
+		if [ ! -z "$SOURCE" ] && [ ! -d "$SOURCE" ];
+		then
+			echo "Source folder not found: $SOURCE";
+		fi;
+		if [ ! -z "$TARGET" ] && [ ! -d "$TARGET" ];
+		then
+			echo "Target folder not found: $TARGET";
+		fi;
+		exit;
 	fi;
-	if [ ! -z $TARGET ] && [ ! -d $TARGET ];
+else
+	if [[ -z "$SOURCE" || -z "$TARGET" ]];
 	then
-		echo "Target folder not found: $TARGET";
+		echo "Give source and target path.";
+		exit;
 	fi;
-	exit;
 fi;
 
 # run lock file, based on source target folder names (/ transformed to _)
 RUN_FOLDER='/var/run/';
-run_file=$RUN_FOLDER"rsync-script_"`echo $SOURCE | sed -e 's/\//_/g'`'_'`echo $TARGET | sed -e 's/\//_/g'`'.run';
+run_file=$RUN_FOLDER"rsync-script_"`echo "$SOURCE" | sed -e 's/[\/@\*:]/_/g'`'_'`echo "$TARGET" | sed -e 's/[\/@\*:]/_/g'`'.run';
 exists=0;
 if [ -f "$run_file" ];
 then
