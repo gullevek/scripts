@@ -10,6 +10,7 @@ function usage ()
 
 	-v: verbose output, if used outside scripted runs
 	-x: add -X rsync flag for extended attributes. Can oops certain kernels.
+	-c: do not check if source or target folder exist, can be used for remote syncs
 	-l: log file name, if not set default name is used
 	-s: source folder, must exist
 	-t: target folder, must exist
@@ -80,7 +81,6 @@ then
 	fi;
 fi;
 
-echo "S: $SOURCE | T: $TARGET";
 if [ $CHECK -eq 1 ];
 then
 	if [[ ! -d "$SOURCE" || ! -d "$TARGET" ]];
