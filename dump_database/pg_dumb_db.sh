@@ -14,14 +14,16 @@ function usage ()
 	-h <DB_HOST>: optional hostname, if not given 'locahost' is used
 	-p <DB_PORT>: optional port number, if not given '5432' is used
 	-i <POSTGRES VERSION>: optional postgresql version in the format X.Y, if not given the default is used (current active)
+	-r: use redhat base paths instead of debian
 
 	EOT
 }
 
 _port=5432
 _host='local';
+REDHAT=0;
 # if we have options, set them and then ignore anything below
-while getopts ":u:d:h:p:i:" opt
+while getopts ":u:d:h:p:i:r" opt
 do
     case $opt in
         u|user)
@@ -56,6 +58,9 @@ do
                 ident=$OPTARG;
             fi;
             ;;
+		r|redhat)
+			REDHAT=1;
+			;;
         h|help)
             usage;
             exit 0;
@@ -75,9 +80,14 @@ then
 	exit 1;
 fi;
 
-# Debian base path
-PG_BASE_PATH='/usr/lib/postgresql/';
-# Redhat base path (for non official ones would be '/usr/pgsql-'
+if [ "$REDHAT" -eq 1 ];
+then
+	# Redhat base path (for non official ones would be '/usr/pgsql-'
+	PG_BASE_PATH='/usr/pgsql-';
+else
+	# Debian base path
+	PG_BASE_PATH='/usr/lib/postgresql/';
+fi;
 
 # if no ident is given, try to find the default one, if not fall back to pre set one
 if [ ! -z "$ident" ];

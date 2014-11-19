@@ -12,9 +12,10 @@ function usage ()
 	-o <DB OWNER>: The user who will be owner of the database to be restored
 	-d <DB NAME>: The database to restore the file to
 	-f <FILE NAME>: the data that should be loaded
-	-h <DB HOST>: optional hostname, if not given 'locahost' is used
+	-h <DB HOST>: optional hostname, if not given 'localhost' is used
 	-p <DB PORT>: optional port number, if not given '5432' is used
 	-i <POSTGRES VERSION>: optional postgresql version in the format X.Y, if not given the default is used (current active)
+	-r: use redhat base paths instead of debian ones
 
 	EOT
 }
@@ -22,8 +23,9 @@ function usage ()
 _port=5432
 _host='local';
 NO_ASK=0;
+REDHAT=0;
 # if we have options, set them and then ignore anything below
-while getopts ":o:d:h:f:p:i:q" opt
+while getopts ":o:d:h:f:p:i:rq" opt
 do
     case $opt in
         o|owner)
@@ -67,6 +69,9 @@ do
             ;;
 		q|quiet)
 			NO_ASK=1;
+			;;
+		r|redhat)
+			REDHAT=1;
 			;;
         h|help)
             usage;
@@ -125,9 +130,14 @@ then
 	exit 1;
 fi;
 
-# Debian base path
-PG_BASE_PATH='/usr/lib/postgresql/';
-# Redhat base path (for non official ones would be '/usr/pgsql-'
+if [ "$REDHAT" -eq 1 ];
+then
+	# Debian base path
+	PG_BASE_PATH='/usr/pgsql-';
+else
+	# Redhat base path (for non official ones would be '/usr/pgsql-'
+	PG_BASE_PATH='/usr/lib/postgresql/';
+fi;
 
 # if no ident is given, try to find the default one, if not fall back to pre set one
 if [ ! -z "$ident" ];
