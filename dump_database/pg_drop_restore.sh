@@ -170,6 +170,37 @@ PG_PSQL=$PG_PATH"psql";
 MAX_JOBS=4; # if there are more CPU cores available, this can be set higher
 TEMP_FILE="temp";
 LOG_FILE_EXT=$database.`date +"%Y%m%d_%H%M%S"`".log";
+# check that all files exist
+error=0;
+if [ ! -f "$PG_DROPDB" ];
+then
+	echo "Missing dropdb in path $PG_PATH";
+	error=1;
+fi;
+if [ ! -f "$PG_CREATEDB" ];
+then
+	echo "Missing createdb in path $PG_PATH";
+	error=1;
+fi;
+if [ ! -f "$PG_CREATELANG" ];
+then
+	echo "Missing createlang in path $PG_PATH";
+	error=1;
+fi;
+if [ ! -f "$PG_RESTORE" ];
+then
+	echo "Missing pg_restore in path $PG_PATH";
+	error=1;
+fi;
+if [ ! -f "$PG_PSQL" ];
+then
+	echo "Missing psql in path $PG_PATH";
+	error=1;
+fi;
+if [ "$error" -eq 1 ];
+then
+	exit 1;
+fi;
 echo "USING POSTGRESQL: $ident";
 
 # check if port / host settings are OK

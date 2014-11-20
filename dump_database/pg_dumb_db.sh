@@ -114,6 +114,23 @@ fi;
 
 PG_DUMP=$PG_PATH"pg_dump";
 PG_PSQL=$PG_PATH"psql";
+# Check if files exist
+error=0;
+if [ ! -f "$PG_DUMP" ];
+then
+	echo "Missing pg_dump in path $PG_PATH";
+	error=1;
+fi;
+if [ ! -f "$PG_PSQL" ];
+then
+	echo "Missing psql in path $PG_PATH";
+	error=1;
+fi;
+if [ "$error" -eq 1 ];
+then
+	exit 1;
+fi;
+
 echo "Using PostgreSQL version: $ident";
 
 # pre check if this DB / user exists or is acccessable
