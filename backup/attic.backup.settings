@@ -1,0 +1,18 @@
+# Attic backup wrapper scripts settings
+
+# Backup via attic, script file
+DEBUG=0;
+VERBOSE=0;
+
+# target users, etc
+TARGET_USER="";
+TARGET_HOST="";
+TARGET_FOLDER="/path/to/attic/base/";
+# the backup file for this host
+BACKUP_FILE="some-name-"`hostname`".attic";
+# todays date
+DATE=`date +%Y-%m-%d`;
+# post run cleanup times
+KEEP_DAYS=7;
+KEEP_WEEKS=4;
+KEEP_MONTHS=6;
