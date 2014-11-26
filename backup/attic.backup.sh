@@ -45,7 +45,7 @@ done<"$BASE_FOLDER$INCLUDE_FILE";
 # exclude list
 if [ -f "$BASE_FOLDER$EXCLUDE_FILE" ];
 then
-	COMMAND=$COMMAND" --exclude-from \"$BASE_FOLDER$EXCLUDE_FILE\"";
+	COMMAND=$COMMAND" --exclude-from $BASE_FOLDER$EXCLUDE_FILE";
 fi;
 
 # execute backup command
@@ -54,7 +54,7 @@ then
 	echo $COMMAND;
 	PRUNE_DEBUG="--dry-run";
 else
-	`$COMMAND`:
+	$COMMAND;
 fi;
 
 # clean up, always verbose
