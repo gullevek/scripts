@@ -9,7 +9,7 @@ function usage ()
 	Usage: ${0##/*/} [-v] [-x] [-s <source folder>] [-t <target folder>]
 
 	-v: verbose output, if used outside scripted runs
-	-x: add -X rsync flag for extended attributes. Can oops certain kernels.
+	-x: add -X and -A rsync flag for extended attributes. Can oops certain kernels.
 	-c: do not check if source or target folder exist, can be used for remote syncs
 	-l: log file name, if not set default name is used
 	-s: source folder, must exist
@@ -33,7 +33,7 @@ do
             VERBOSE='-P';
             ;;
         x|extattr)
-            EXT_ATTRS='-X';
+            EXT_ATTRS='-XA';
             ;;
 		c|check)
 			CHECK=0;
@@ -139,7 +139,8 @@ echo $$ > "$run_file";
 # hh: human readable in K/M/G/...
 
 # remove -X for nfs sync, it screws up and oops (kernel 3.14-2)
-basic_params='-azAvi --stats --delete --exclude "lost+found" -hh';
+# remove -A for nfs sync, has problems with ACL data
+basic_params='-azvi --stats --delete --exclude "lost+found" -hh';
 
 echo "Sync '$SOURCE' to '$TARGET' ...";
 rsync $basic_params $VERBOSE $XT_ATTRS --log-file=$LOG_FILE --log-file-format="%o %i %f%L %l (%b)" $SOURCE $TARGET;
