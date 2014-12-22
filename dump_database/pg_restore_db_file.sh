@@ -2,6 +2,7 @@
 
 DUMP_FOLDER='/<source folder>/';
 DBPATH_BASE='/usr/lib/postgresql/';
+#DBPATH_BASE='/usr/pgsql-'
 DBPATH_VERSION='9.3/';
 DBPATH_BIN='bin/';
 DROPDB="dropdb";
@@ -12,21 +13,21 @@ CREATEUSER="createuser";
 PSQL="psql";
 PORT=5432;
 HOST='localhost';
-LOGS='/root/logs/';
+LOGS=$DUMP_FOLDER'logs/';
 EXCLUDE_LIST="pg_globals"; # space separated
 
 # check that source folder is there
-if [ ! -d $DUMP_FOLDER ];
+if [ ! -d "$DUMP_FOLDER" ];
 then
 	echo "Folder $DUMP_FOLDER does not exist";
 	exit;
 fi;
 
 # create logs folder if missing
-if [ ! -d $LOGS ];
+if [ ! -d "$LOGS" ];
 then
 	echo "Creating $LOGS folder";
-	mkdir -p $LOGS;
+	mkdir -p "$LOGS";
 fi;
 
 # just set port & host for internal use

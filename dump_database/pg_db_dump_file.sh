@@ -23,6 +23,7 @@ function usage ()
 	-h <db host>: default is none
 	-p <db port>: default port is '5432'
 	-l <db password>: default password is empty
+	-r: use redhat base paths instead of debian
 	EOT
 }
 
@@ -48,9 +49,10 @@ _DB_HOST='';
 _DB_PORT=5432;
 _EXCLUDE=''; # space separated list of database names
 _INCLUDE=''; # space seperated list of database names
+REDHAT=0;
 
 # set options
-while getopts ":tsgk:b:i:d:e:u:h:p:l:" opt
+while getopts ":tsgk:b:i:d:e:u:h:p:l:r" opt
 do
 	case $opt in
 		t|test)
@@ -115,6 +117,9 @@ do
 			fi;
 			EXCLUDE=$EXCLUDE$OPTARG;
 			;;
+		r|redhat)
+			REDHAT=1;
+			;;
 		h|help)
             usage;
             exit 0;
@@ -156,7 +161,16 @@ else
 	CONN_DB_HOST='-h '$DB_HOST;
 fi;
 
-PG_PATH='/usr/lib/postgresql/'$DB_VERSION'/bin/';
+if [ "$REDHAT" -eq 1 ];
+then
+	# Redhat base path (for non official ones would be '/usr/pgsql-'
+	PG_BASE_PATH='/usr/pgsql-';
+else
+	# Debian base path
+	PG_BASE_PATH='/usr/lib/postgresql/';
+fi;
+
+PG_PATH=$PG_BASE_PATH$DB_VERSION'/bin/';
 PG_PSQL=$PG_PATH'psql';
 PG_DUMP=$PG_PATH'pg_dump';
 PG_DUMPALL=$PG_PATH'pg_dumpall';
