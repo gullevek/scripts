@@ -15,6 +15,7 @@ PORT=5432;
 HOST='localhost';
 LOGS=$DUMP_FOLDER'logs/';
 EXCLUDE_LIST="pg_globals"; # space separated
+LOGFILE="tee -a $LOGS/PG_RESTORE_DB_FILE.`date +"%F_%T"`.log";
 
 # check that source folder is there
 if [ ! -d "$DUMP_FOLDER" ];
@@ -28,6 +29,11 @@ if [ ! -d "$LOGS" ];
 then
 	echo "Creating $LOGS folder";
 	mkdir -p "$LOGS";
+	if [ ! -d "$LOGS" ];
+	then
+		echo "Creation of $LOGS folder failed";
+		exit;
+	fi;
 fi;
 
 # just set port & host for internal use
@@ -39,19 +45,19 @@ _host=$HOST;
 # get the count for DBs to import
 db_count=`find $DUMP_FOLDER -name "*.sql" -print | wc -l`;
 # start info
-echo "= Will import $db_count from $DUMP_FOLDER";
-echo "= into the DB server $HOST:$PORT";
-echo "= import logs: $LOGS";
-echo "";
+echo "= Will import $db_count from $DUMP_FOLDER" | $LOGFILE;
+echo "= into the DB server $HOST:$PORT" | $LOGFILE;
+echo "= import logs: $LOGS" | $LOGFILE;
+echo "" | $LOGFILE;
 pos=1;
 # go through all the files an import them into the database
 MASTERSTART=`date +'%s'`;
 master_start_time=`date +"%F %T"`;
-for file in $DUMP_FOLDER/*;
+for file in $DUMP_FOLDER/*.sql;
 do
 	start_time=`date +"%F %T"`;
 	START=`date +'%s'`;
-	echo "=[$pos/$db_count]=START=[$start_time]==================================================>";
+	echo "=[$pos/$db_count]=START=[$start_time]==================================================>" | $LOGFILE;
 	# get the filename
 	filename=`basename $file`;
 	# get the databse, user
@@ -87,28 +93,28 @@ do
 		user_oid=`echo "SELECT oid FROM pg_roles WHERE rolname = '$owner';" | $PSQL -U postgres $host $port -A -F "," -t -q -X template1`;
 		if [ -z $user_oid ];
 		then
-			echo "+ Create USER '$owner' for DB '$database' [$_host:$_port] @ `date +"%F %T"`";
-			$CREATEUSER -U postgres -D -R -S $owner;
+			echo "+ Create USER '$owner' for DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
+			$CREATEUSER -U postgres -D -R -S $host $port $owner;
 		fi;
 		# before importing the data, drop this database
-		echo "- Drop DB '$database' [$_host:$_port] @ `date +"%F %T"`";
+		echo "- Drop DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
 		$DBPATH$DROPDB -U postgres $host $port $database;
-		echo "+ Create DB '$database' with '$owner' [$_host:$_port] @ `date +"%F %T"`";
+		echo "+ Create DB '$database' with '$owner' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
 		$DBPATH$CREATEDB -U postgres -O $owner -E utf8 $host $port $database;
-		echo "+ Create plpgsql lang in DB '$database' [$_host:$_port] @ `date +"%F %T"`";
+		echo "+ Create plpgsql lang in DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
 		$DBPATH$CREATELANG -U postgres plpgsql $host $port $database;
-		echo "% Restore data from '$filename' to DB '$database' [$_host:$_port] @ `date +"%F %T"`";
+		echo "% Restore data from '$filename' to DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
 		$DBPATH$PGRESTORE -U postgres -d $database -F c -v -c -j 4 $host $port $file 2>$LOGS'/errors.'$database'.'`date +"%F_%T"`;
-		echo "$ Restore of data '$filename' for DB '$database' [$_host:$_port] finished";
+		echo "$ Restore of data '$filename' for DB '$database' [$_host:$_port] finished" | $LOGFILE;
 		DURATION=$[ `date +'%s'`-$START ];
-		echo "* Start at $start_time and end at `date +"%F %T"` and ran for $DURATION seconds";
+		echo "* Start at $start_time and end at `date +"%F %T"` and ran for $DURATION seconds" | $LOGFILE;
 	else
 		DURATION=0;
-		echo "# Skipped DB '$database'";
+		echo "# Skipped DB '$database'" | $LOGFILE;
 	fi;
-	printf "=[$pos/$db_count]=END===[%5s seconds]========================================================>\n" $DURATION;
+	printf "=[$pos/$db_count]=END===[%5s seconds]========================================================>\n" $DURATION | $LOGFILE;
 	pos=$[ $pos+1 ];
 done;
 DURATION=$[ `date +'%s'`-$MASTERSTART ];
-echo "";
-echo "= Start at $master_start_time and end at `date +"%F %T"` and ran for $DURATION seconds. Imported $db_count databases.";
+echo "" | $LOGFILE;
+echo "= Start at $master_start_time and end at `date +"%F %T"` and ran for $DURATION seconds. Imported $db_count databases." | $LOGFILE;

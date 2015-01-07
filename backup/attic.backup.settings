@@ -1,5 +1,8 @@
 # Attic backup wrapper scripts settings
 
+# home folder, needs to be set if there is eg a HOME=/ in the crontab
+HOME=/root/
+
 # Backup via attic, script file
 DEBUG=0;
 VERBOSE=0;
