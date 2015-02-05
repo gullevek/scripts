@@ -9,11 +9,12 @@
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} [-t] [-s] [-g] [-k <number to keep>] [-b <path>] [-i <postgreSQL version>] [-d <dump database name> [-d ...]] [-e <exclude dump> [-e ...]] [-u <db user>] [-h <db host>] [-p <db port>] [-l <db password>]
+	Usage: ${0##/*/} [-t] [-s] [-g] [-c] [-k <number to keep>] [-b <path>] [-i <postgreSQL version>] [-d <dump database name> [-d ...]] [-e <exclude dump> [-e ...]] [-u <db user>] [-h <db host>] [-p <db port>] [-l <db password>]
 
 	-t: test usage, no real backup is done
 	-s: turn ON ssl mode, default mode is off
 	-g: turn OFF dumping globals data, default is dumping globals data
+	-c: run clean up of old files before data is dumped. Default is run after data dump.
 	-k: keep how many backups, default is 3
 	-b <path>: backup target path, if not set, /mnt/backup/db_dumps_fc/ is used
 	-i <version>: override automatically set database version
@@ -40,6 +41,7 @@ DB_PORT=;
 EXCLUDE=''; # space separated list of database names
 INCLUDE=''; # space seperated list of database names
 BC='/usr/bin/bc';
+PRE_RUN_CLEAN_UP=0;
 # defaults
 _BACKUPDIR='/mnt/backup/db_dumps_fc/';
 _DB_VERSION=`pg_dump --version | grep "pg_dump" | cut -d " " -f 3 | cut -d "." -f 1,2`;
@@ -52,7 +54,7 @@ _INCLUDE=''; # space seperated list of database names
 REDHAT=0;
 
 # set options
-while getopts ":tsgk:b:i:d:e:u:h:p:l:r" opt
+while getopts ":ctsgk:b:i:d:e:u:h:p:l:r" opt
 do
 	case $opt in
 		t|test)
@@ -60,6 +62,9 @@ do
 			;;
 		g|globals)
 			GLOBALS=0;
+			;;
+		c|clean-up-before)
+			PRE_RUN_CLEAN_UP=1;
 			;;
 		s|sslmode)
 			SSLMODE=enable;
@@ -312,6 +317,35 @@ function get_dump_file_name
 	echo "$filename";
 }
 
+# METHOD: clean_up
+# PARAMS: none
+# RETURN: none
+# CALL  : $(clean_up);
+# DESC  : checks for older files than given keep time and removes them
+function clean_up
+{
+	if [ -d $BACKUPDIR ]; then
+		echo "Cleanup older than $KEEP days backups in $BACKUPDIR";
+		# build the find string based on the search names patter
+		find_string='';
+		for name in $search_names;
+		do
+			if [ ! -z "$find_string" ];
+			then
+				find_string=$find_string' -o ';
+			fi;
+			find_string=$find_string"-mtime +$KEEP -name "$name$DB_TYPE*.sql" -type f -delete -print";
+			echo "- Remove old backups for '$name'";
+		done;
+		if [ $TEST -eq 0 ];
+		then
+			find $BACKUPDIR $find_string;
+		else
+			echo "find $BACKUPDIR $find_string";
+		fi;
+	fi
+}
+
 if [ ! -z "$DB_PASSWD" ];
 then
 	export PGPASSWORD=$DB_PASSWD;
@@ -320,6 +354,12 @@ START=`date "+%s"`;
 echo Starting at `date "+%Y-%m-%d %H:%M:%S"`
 echo "Target dump directory is $BACKUPDIR";
 echo "Keep $KEEP backups";
+# if flag is set, do pre run clean up
+if [ $PRE_RUN_CLEAN_UP -eq 1 ];
+then
+	clean_up;
+fi;
+# dump globals
 if [ $GLOBALS -eq 1 ];
 then
 	echo -e -n "+ Dumping globals...\t\t"
@@ -404,26 +444,11 @@ then
 	unset DB_PASSWD;
 fi;
 
-if [ -d $BACKUPDIR ]; then
-	echo "Cleanup older than $KEEP days backups in $BACKUPDIR";
-	# build the find string based on the search names patter
-	find_string='';
-	for name in $search_names;
-	do
-		if [ ! -z "$find_string" ];
-		then
-			find_string=$find_string' -o ';
-		fi;
-		find_string=$find_string"-mtime +$KEEP -name "$name$DB_TYPE*.sql" -type f -delete -print";
-		echo "- Remove old backups for '$name'";
-	done;
-	if [ $TEST -eq 0 ];
-	then
-		find $BACKUPDIR $find_string;
-	else
-		echo "find $BACKUPDIR $find_string";
-	fi;
-fi
+if [ $PRE_RUN_CLEAN_UP -eq 0 ];
+then
+	clean_up;
+fi;
+
 DURATION=$[ `date "+%s"`-$START ];
 echo Ended at `date "+%Y-%m-%d %H:%M:%S"`
 echo "finished script in `convert_time $DURATION`";
