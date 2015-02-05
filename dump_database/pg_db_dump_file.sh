@@ -317,6 +317,51 @@ function get_dump_file_name
 	echo "$filename";
 }
 
+# METHOD: get_dump_databases
+# PARAMS: none
+# RETURN: space separated list of databases to dump
+# CALLS : var=$(get_dump_databases)
+# DESC  : this is needd only for clean up run if the clean up is run before the actually database dump
+function get_dump_databases
+{
+	database_names='';
+	if [ $GLOBALS -eq 1 ];
+	then
+		database_names="pg_globals* ";
+	fi;
+	for owner_db in `$PG_PSQL -U $DB_USER $CONN_DB_HOST -p $DB_PORT -d template1 -t -A -F "," -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)';"`
+	do
+		db=`echo $owner_db | cut -d "," -f 2`;
+		# check if we exclude this db
+		exclude=0;
+		include=0;
+		for excl_db in $EXCLUDE;
+		do
+			if [ "$db" = "$excl_db" ];
+			then
+				exclude=1;
+			fi;
+		done;
+		if [ ! -z "$INCLUDE" ];
+		then
+			for incl_db in $INCLUDE;
+			do
+				if [ "$db" = "$incl_db" ];
+				then
+					include=1;
+				fi;
+			done;
+		else
+			include=1;
+		fi;
+		if [ $exclude -eq 0 ] && [ $include -eq 1 ];
+		then
+			database_names=$database_names$db"* ";
+		fi;
+	done;
+	echo $database_names;
+}
+
 # METHOD: clean_up
 # PARAMS: none
 # RETURN: none
@@ -357,8 +402,12 @@ echo "Keep $KEEP backups";
 # if flag is set, do pre run clean up
 if [ $PRE_RUN_CLEAN_UP -eq 1 ];
 then
+	search_names=$(get_dump_databases);
 	clean_up;
 fi;
+echo "Backing up databases:";
+# reset search name list for actual dump
+search_names='';
 # dump globals
 if [ $GLOBALS -eq 1 ];
 then
