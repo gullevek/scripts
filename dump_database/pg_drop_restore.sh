@@ -22,6 +22,7 @@ function usage ()
 
 _port=5432
 _host='local';
+_encoding='UTF8';
 NO_ASK=0;
 REDHAT=0;
 # if we have options, set them and then ignore anything below
@@ -89,12 +90,13 @@ done;
 if [ -r "$file" ] && ( [ ! "$owner" ] || [ ! "$database" ] );
 then
 	# file name format is
-	# <owner>.<database>.<db type>-<version>_<port>_<host>_<date>_<time>_<sequence>
+	# <owner>.<database>.<encoding>.<db type>-<version>_<port>_<host>_<date>_<time>_<sequence>
 	# we only are interested in the first two
 	_owner=`echo $file | cut -d "." -f 1`;
 	_database=`echo $file | cut -d "." -f 2`;
+	_encoding=`echo $file | cut -d "." -f 3`;
 	# set the others as optional
-	_ident=`echo $file | cut -d "." -f 3 | cut -d "_" -f 1 | cut -d "-" -f 2`;
+	_ident=`echo $file | cut -d "." -f 4 | cut -d "_" -f 1 | cut -d "-" -f 2`;
 	__port=`echo $file | cut -d "_" -f 2`;
 	__host=`echo $file | cut -d "_" -f 3`;
 	# if any of those are not set, override by the file name settings
@@ -116,6 +118,10 @@ then
 	then
 		host='-h '$__host;
 		_host=$__host;
+	fi;
+	if [ -z "$encoding" ];
+	then
+		encoding=$_encoding;
 	fi;
 	if [ ! "$_ident" ];
 	then
@@ -170,37 +176,6 @@ PG_PSQL=$PG_PATH"psql";
 MAX_JOBS=4; # if there are more CPU cores available, this can be set higher
 TEMP_FILE="temp";
 LOG_FILE_EXT=$database.`date +"%Y%m%d_%H%M%S"`".log";
-# check that all files exist
-error=0;
-if [ ! -f "$PG_DROPDB" ];
-then
-	echo "Missing dropdb in path $PG_PATH";
-	error=1;
-fi;
-if [ ! -f "$PG_CREATEDB" ];
-then
-	echo "Missing createdb in path $PG_PATH";
-	error=1;
-fi;
-if [ ! -f "$PG_CREATELANG" ];
-then
-	echo "Missing createlang in path $PG_PATH";
-	error=1;
-fi;
-if [ ! -f "$PG_RESTORE" ];
-then
-	echo "Missing pg_restore in path $PG_PATH";
-	error=1;
-fi;
-if [ ! -f "$PG_PSQL" ];
-then
-	echo "Missing psql in path $PG_PATH";
-	error=1;
-fi;
-if [ "$error" -eq 1 ];
-then
-	exit 1;
-fi;
 echo "USING POSTGRESQL: $ident";
 
 # check if port / host settings are OK
@@ -232,7 +207,7 @@ else
 	echo "Drop DB $database [$_host:$_port] @ $start_time";
 	$PG_DROPDB -U postgres $host $port $database;
 	echo "Create DB $database with $owner [$_host:$_port] @ `date +"%F %T"`";
-	$PG_CREATEDB -U postgres -O $owner -E utf8 $host $port $database;
+	$PG_CREATEDB -U postgres -O $owner -E $encoding $host $port $database;
 	echo "Create plpgsql lang in DB $database [$_host:$_port] @ `date +"%F %T"`";
 	$PG_CREATELANG -U postgres plpgsql $host $port $database;
 	echo "Restore data from $file to DB $database [$_host:$_port] @ `date +"%F %T"`";

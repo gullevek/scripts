@@ -13,6 +13,7 @@ function usage ()
 	-d <DB_NAME>: The database to dump
 	-h <DB_HOST>: optional hostname, if not given 'locahost' is used
 	-p <DB_PORT>: optional port number, if not given '5432' is used
+	-e <encoding>: if not set, the default UTF8 is used
 	-i <POSTGRES VERSION>: optional postgresql version in the format X.Y, if not given the default is used (current active)
 	-r: use redhat base paths instead of debian
 
@@ -21,6 +22,7 @@ function usage ()
 
 _port=5432
 _host='local';
+_encoding='UTF8';
 REDHAT=0;
 # if we have options, set them and then ignore anything below
 while getopts ":u:d:h:p:i:r" opt
@@ -52,6 +54,12 @@ do
 				_port=$OPTARG;
             fi;
             ;;
+		e|encoding)
+			if [ -z "$encoding" ];
+			then
+				encoding=$OPTARG;
+			fi;
+			;;
         i|ident)
             if [ -z "$ident" ];
             then
@@ -112,25 +120,12 @@ then
 	fi;
 fi;
 
+if [ -z "$encoding" ];
+then
+	encoding=$_encoding;
+fi;
 PG_DUMP=$PG_PATH"pg_dump";
 PG_PSQL=$PG_PATH"psql";
-# Check if files exist
-error=0;
-if [ ! -f "$PG_DUMP" ];
-then
-	echo "Missing pg_dump in path $PG_PATH";
-	error=1;
-fi;
-if [ ! -f "$PG_PSQL" ];
-then
-	echo "Missing psql in path $PG_PATH";
-	error=1;
-fi;
-if [ "$error" -eq 1 ];
-then
-	exit 1;
-fi;
-
 echo "Using PostgreSQL version: $ident";
 
 # pre check if this DB / user exists or is acccessable
@@ -146,7 +141,7 @@ fi;
 #ikea_mobile_demo.ikea.pgsql-9.3_5432_20140127_1206_0-8.sql
 sequence=*;
 # file format is "DB"."User"."type-version"_"port"_"host"_"date"_"time"_"seq"-".c.sql"
-file=$database"."$user.".pgsql-"$ident"_"$_host"_"$_port"_"`date +"%Y%m%d"`"_"`date +%H%M`"."$sequence".c.sql";
+file=$database"."$user"."$encoding".pgsql-"$ident"_"$_host"_"$_port"_"`date +"%Y%m%d"`"_"`date +%H%M`"."$sequence".c.sql";
 # we need to find the next sequence
 for i in `ls -1 $file 2>/dev/null`;
 do

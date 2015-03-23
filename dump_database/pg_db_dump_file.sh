@@ -25,6 +25,7 @@ function usage ()
 	-p <db port>: default port is '5432'
 	-l <db password>: default password is empty
 	-r: use redhat base paths instead of debian
+	-a: use amazon base paths instead of debian
 	EOT
 }
 
@@ -52,6 +53,7 @@ _DB_PORT=5432;
 _EXCLUDE=''; # space separated list of database names
 _INCLUDE=''; # space seperated list of database names
 REDHAT=0;
+AMAZON=0;
 
 # set options
 while getopts ":ctsgk:b:i:d:e:u:h:p:l:r" opt
@@ -125,6 +127,9 @@ do
 		r|redhat)
 			REDHAT=1;
 			;;
+		a|amazon)
+			AMAZON=1;
+			;;
 		h|help)
             usage;
             exit 0;
@@ -170,6 +175,9 @@ if [ "$REDHAT" -eq 1 ];
 then
 	# Redhat base path (for non official ones would be '/usr/pgsql-'
 	PG_BASE_PATH='/usr/pgsql-';
+elif [ "$AMAZON" -eq 1 ];
+then
+	PG_BASE_PATH='/usr/lib64/pgsql';
 else
 	# Debian base path
 	PG_BASE_PATH='/usr/lib/postgresql/';
@@ -288,9 +296,9 @@ function get_dump_file_name
 	sequence=*;
 	if [ $db ];
 	then
-		db_name=$db"."$owner".";
+		db_name=$db"."$owner"."$encoding".";
 	else
-		db_name="pg_globals."$DB_USER".";
+		db_name="pg_globals."$DB_USER".NONE.";
 	fi;
 	file=$BACKUPDIR$db_name$DB_TYPE"-"$DB_VERSION"_"$DB_HOST"_"$DB_PORT"_"`date +%Y%m%d`"_"`date +%H%M`"_"$sequence".c.sql";
 	# we need to find the next sequence number
@@ -329,7 +337,7 @@ function get_dump_databases
 	then
 		database_names="pg_globals* ";
 	fi;
-	for owner_db in `$PG_PSQL -U $DB_USER $CONN_DB_HOST -p $DB_PORT -d template1 -t -A -F "," -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)';"`
+	for owner_db in `$PG_PSQL -U $DB_USER $CONN_DB_HOST -p $DB_PORT -d template1 -t -A -F "," -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname, pg_catalog.pg_encoding_to_char(encoding) FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)';"`
 	do
 		db=`echo $owner_db | cut -d "," -f 2`;
 		# check if we exclude this db
@@ -440,11 +448,12 @@ else
 	echo $EXCLUDE;
 fi;
 
-for owner_db in `$PG_PSQL -U $DB_USER $CONN_DB_HOST -p $DB_PORT -d template1 -t -A -F "," -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)';"`
+for owner_db in `$PG_PSQL -U $DB_USER $CONN_DB_HOST -p $DB_PORT -d template1 -t -A -F "," -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname, pg_catalog.pg_encoding_to_char(encoding) AS encoding FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)';"`
 do
 	# get the user who owns the DB too
 	owner=`echo $owner_db | cut -d "," -f 1`;
 	db=`echo $owner_db | cut -d "," -f 2`;
+	encoding=`echo $owner_db | cut -d "," -f 3`;
 	# check if we exclude this db
 	exclude=0;
 	include=0;

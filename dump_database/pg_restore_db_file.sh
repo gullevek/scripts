@@ -117,8 +117,8 @@ then
 	# get newest and only the first one
 	file=`ls -1t $DUMP_FOLDER/pg_global* | head -1`;
 	filename=`basename $file`;
-	version=`echo $filename | cut -d "." -f 3 | cut -d "-" -f 2`; # db version, without prefix of DB type
-	version=$version'.'`echo $filename | cut -d "." -f 4 | cut -d "_" -f 1`; # db version, second part (after .)
+	version=`echo $filename | cut -d "." -f 4 | cut -d "-" -f 2`; # db version, without prefix of DB type
+	version=$version'.'`echo $filename | cut -d "." -f 5 | cut -d "_" -f 1`; # db version, second part (after .)
 	# create the path to the DB from the DB version in the backup file
 	if [ ! -z "$version" ];
 	then
@@ -140,14 +140,15 @@ do
 	# get the filename
 	filename=`basename $file`;
 	# get the databse, user
-	# default file name is <database>_<owner>.<type>-<version>_<host>_<port>_<date>_<time>_<sequence>
+	# default file name is <database>.<owner>.<encoding>.<type>-<version>_<host>_<port>_<date>_<time>_<sequence>
 	database=`echo $filename | cut -d "." -f 1`;
 	owner=`echo $filename | cut -d "." -f 2`;
-	version=`echo $filename | cut -d "." -f 3 | cut -d "-" -f 2`; # db version, without prefix of DB type
-	version=$version'.'`echo $filename | cut -d "." -f 4 | cut -d "_" -f 1`; # db version, second part (after .)
-	host_name=`echo $filename | cut -d "." -f 4 | cut -d "_" -f 2`; # hostname of original DB, can be used as target host too
-	dump_port=`echo $filename | cut -d "." -f 4 | cut -d "_" -f 3`; # port of original DB, can be used as target port too
-	other=`echo $filename | cut -d "." -f 4 | cut -d "_" -f 2-`; # backup date and time, plus sequence
+	encoding=`echo $filename | cut -d "." -f 3`;
+	version=`echo $filename | cut -d "." -f 4 | cut -d "-" -f 2`; # db version, without prefix of DB type
+	version=$version'.'`echo $filename | cut -d "." -f 5 | cut -d "_" -f 1`; # db version, second part (after .)
+	host_name=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 2`; # hostname of original DB, can be used as target host too
+	dump_port=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 3`; # port of original DB, can be used as target port too
+	other=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 2-`; # backup date and time, plus sequence
 	# create the path to the DB from the DB version in the backup file
 	if [ ! -z "$version" ];
 	then
@@ -179,7 +180,7 @@ do
 		echo "- Drop DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
 		$DBPATH$DROPDB -U postgres $host $port $database;
 		echo "+ Create DB '$database' with '$owner' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
-		$DBPATH$CREATEDB -U postgres -O $owner -E utf8 $host $port $database;
+		$DBPATH$CREATEDB -U postgres -O $owner -E $encoding $host $port $database;
 		echo "+ Create plpgsql lang in DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
 		$DBPATH$CREATELANG -U postgres plpgsql $host $port $database;
 		echo "% Restore data from '$filename' to DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
