@@ -9,7 +9,7 @@
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} [-t] [-s] [-g] [-c] [-k <number to keep>] [-b <path>] [-i <postgreSQL version>] [-d <dump database name> [-d ...]] [-e <exclude dump> [-e ...]] [-u <db user>] [-h <db host>] [-p <db port>] [-l <db password>]
+	Usage: ${0##/*/} [-t] [-s] [-g] [-c] [-r|-a] [-k <number to keep>] [-b <path>] [-i <postgreSQL version>] [-d <dump database name> [-d ...]] [-e <exclude dump> [-e ...]] [-u <db user>] [-h <db host>] [-p <db port>] [-l <db password>]
 
 	-t: test usage, no real backup is done
 	-s: turn ON ssl mode, default mode is off
@@ -56,7 +56,7 @@ REDHAT=0;
 AMAZON=0;
 
 # set options
-while getopts ":ctsgk:b:i:d:e:u:h:p:l:r" opt
+while getopts ":ctsgk:b:i:d:e:u:h:p:l:ra" opt
 do
 	case $opt in
 		t|test)
@@ -141,6 +141,11 @@ do
 			;;
 	esac;
 done;
+
+if [ "$REDHAT" -eq 1 ] && [ "$AMAZON" -eq 1 ];
+then
+	echo "You cannot set the -a and -r flag at the same time";
+fi;
 
 # set the defaults
 for name in BACKUPDIR DB_VERSION DB_USER DB_PASSWD DB_HOST DB_PORT EXCLUDE INCLUDE;
