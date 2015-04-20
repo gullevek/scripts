@@ -43,6 +43,7 @@ EXCLUDE=''; # space separated list of database names
 INCLUDE=''; # space seperated list of database names
 BC='/usr/bin/bc';
 PRE_RUN_CLEAN_UP=0;
+SET_IDENT=0;
 # defaults
 _BACKUPDIR='/mnt/backup/db_dumps_fc/';
 _DB_VERSION=`pg_dump --version | grep "pg_dump" | cut -d " " -f 3 | cut -d "." -f 1,2`;
@@ -84,6 +85,7 @@ do
 			if [ -z "$DB_VERSION" ];
 			then
 				DB_VERSION=$OPTARG;
+				SET_IDENT=1;
 			fi;
 			;;
 		u|user)
@@ -209,6 +211,14 @@ if [ ! -d $BACKUPDIR ] ; then
 	fi
 fi
 
+# if we have an ident override set, set a different DUMP VERSION here than the automatic one
+if [ "$SET_IDENT" -eq 1 ];
+then
+	DUMP_DB_VERSION=`$PG_PATH/pg_dump --version | grep "pg_dump" | cut -d " " -f 3 | cut -d "." -f 1,2`;
+else
+	DUMP_DB_VERSION=$DB_VERSION;
+fi;
+
 # turn of ssl
 # comment line out, if SSL connection is wanted
 export PGSSLMODE=$SSLMODE;
@@ -305,7 +315,7 @@ function get_dump_file_name
 	else
 		db_name="pg_globals."$DB_USER".NONE.";
 	fi;
-	file=$BACKUPDIR$db_name$DB_TYPE"-"$DB_VERSION"_"$DB_HOST"_"$DB_PORT"_"`date +%Y%m%d`"_"`date +%H%M`"_"$sequence".c.sql";
+	file=$BACKUPDIR$db_name$DB_TYPE"-"$DUMP_DB_VERSION"_"$DB_HOST"_"$DB_PORT"_"`date +%Y%m%d`"_"`date +%H%M`"_"$sequence".c.sql";
 	# we need to find the next sequence number
 	for i in `ls -1 $file 2>/dev/null`;
 	do 
@@ -326,7 +336,7 @@ function get_dump_file_name
 		sequence="01";
 	fi;
 	# now build correct file name
-	filename=$BACKUPDIR$db_name$DB_TYPE"-"$DB_VERSION"_"$DB_HOST"_"$DB_PORT"_"`date +%Y%m%d`"_"`date +%H%M`"_"$sequence".c.sql";
+	filename=$BACKUPDIR$db_name$DB_TYPE"-"$DUMP_DB_VERSION"_"$DB_HOST"_"$DB_PORT"_"`date +%Y%m%d`"_"`date +%H%M`"_"$sequence".c.sql";
 	echo "$filename";
 }
 

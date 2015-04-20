@@ -105,6 +105,7 @@ then
 	then
 		ident='';
 	fi;
+	dump_version=`$PG_PATH/pg_dump --version | grep "pg_dump" | cut -d " " -f 3 | cut -d "." -f 1,2`;
 fi;
 if [ -z "$ident" ];
 then
@@ -118,6 +119,7 @@ then
 		ident='9.3';
 		PG_PATH=$PG_BASE_PATH'9.3/bin/';
 	fi;
+	dump_version=$ident;
 fi;
 
 if [ -z "$encoding" ];
@@ -126,7 +128,8 @@ then
 fi;
 PG_DUMP=$PG_PATH"pg_dump";
 PG_PSQL=$PG_PATH"psql";
-echo "Using PostgreSQL version: $ident";
+echo "Using PostgreSQL version: $ident and set Dump Version: $dump_version";
+exit;
 
 # pre check if this DB / user exists or is acccessable
 output=`echo "SELECT version();" | $PG_PSQL -U $user $host $port $database -q -t -X -A -F "," 2>&1`;
@@ -141,7 +144,7 @@ fi;
 #ikea_mobile_demo.ikea.pgsql-9.3_5432_20140127_1206_0-8.sql
 sequence=*;
 # file format is "DB"."User"."type-version"_"port"_"host"_"date"_"time"_"seq"-".c.sql"
-file=$database"."$user"."$encoding".pgsql-"$ident"_"$_host"_"$_port"_"`date +"%Y%m%d"`"_"`date +%H%M`"."$sequence".c.sql";
+file=$database"."$user"."$encoding".pgsql-"$dump_version"_"$_host"_"$_port"_"`date +"%Y%m%d"`"_"`date +%H%M`"."$sequence".c.sql";
 # we need to find the next sequence
 for i in `ls -1 $file 2>/dev/null`;
 do
@@ -161,7 +164,7 @@ else
 	sequence="01";
 fi;
 # now build correct file name
-file=$database"."$user."pgsql-"$ident"_"$_host"_"$_port"_"`date +"%Y%m%d"`"_"`date +%H%M`"."$sequence".c.sql";
+file=$database"."$user."pgsql-"$dump_version"_"$_host"_"$_port"_"`date +"%Y%m%d"`"_"`date +%H%M`"."$sequence".c.sql";
 
 start_time=`date +"%F %T"`;
 START=`date +'%s'`;

@@ -7,15 +7,17 @@
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} -o <DB OWNER> -d <DB NAME> -f <FILE NAME> [-h <DB HOST>] [-p <DB PORT>] [-i <POSTGRES VERSION>]
+	Usage: ${0##/*/} -o <DB OWNER> -d <DB NAME> -f <FILE NAME> [-h <DB HOST>] [-p <DB PORT>] [-e <ENCODING>] [-i <POSTGRES VERSION>] [-r|-a]
 
 	-o <DB OWNER>: The user who will be owner of the database to be restored
 	-d <DB NAME>: The database to restore the file to
 	-f <FILE NAME>: the data that should be loaded
 	-h <DB HOST>: optional hostname, if not given 'localhost' is used
 	-p <DB PORT>: optional port number, if not given '5432' is used
+	-e <ENCODING>: optional encoding name, if not given 'UTF8' is used
 	-i <POSTGRES VERSION>: optional postgresql version in the format X.Y, if not given the default is used (current active)
-	-r: use redhat base paths instead of debian ones
+	-r: use redhat base paths instead of debian
+	-a: use amazon base paths instead of debian
 
 	EOT
 }
@@ -24,9 +26,11 @@ _port=5432
 _host='local';
 _encoding='UTF8';
 NO_ASK=0;
+TEMPLATEDB='template0';
 REDHAT=0;
+AMAZON=0;
 # if we have options, set them and then ignore anything below
-while getopts ":o:d:h:f:p:i:rq" opt
+while getopts ":o:d:h:f:p:e:i:raq" opt
 do
     case $opt in
         o|owner)
@@ -41,6 +45,12 @@ do
                 database=$OPTARG;
             fi;
             ;;
+		e|encoding)
+			if [ -z "$encoding" ];
+			then
+				encoding=$OPTARG;
+			fi;
+			;;
         f|file)
             if [ -z "$file" ];
             then
@@ -74,6 +84,9 @@ do
 		r|redhat)
 			REDHAT=1;
 			;;
+		a|amazon)
+			AMAZON=1;
+			;;
         h|help)
             usage;
             exit 0;
@@ -86,19 +99,25 @@ do
     esac;
 done;
 
+if [ "$REDHAT" -eq 1 ] && [ "$AMAZON" -eq 1 ];
+then
+	echo "You cannot set the -a and -r flag at the same time";
+fi;
+
 # if file is set and exist, but no owner or database are given, use the file name data to get user & database
-if [ -r "$file" ] && ( [ ! "$owner" ] || [ ! "$database" ] );
+if [ -r "$file" ] && ( [ ! "$owner" ] || [ ! "$database" ] || [ ! "$encoding" ] );
 then
 	# file name format is
-	# <owner>.<database>.<encoding>.<db type>-<version>_<port>_<host>_<date>_<time>_<sequence>
+	# <database>.<owner>.<encoding>.<db type>-<version>_<host>_<port>_<date>_<time>_<sequence>
 	# we only are interested in the first two
-	_owner=`echo $file | cut -d "." -f 1`;
-	_database=`echo $file | cut -d "." -f 2`;
-	_encoding=`echo $file | cut -d "." -f 3`;
+	_database=`echo $file | cut -d "." -f 1`;
+	_owner=`echo $file | cut -d "." -f 2`;
+	__encoding=`echo $file | cut -d "." -f 3`;
 	# set the others as optional
-	_ident=`echo $file | cut -d "." -f 4 | cut -d "_" -f 1 | cut -d "-" -f 2`;
-	__port=`echo $file | cut -d "_" -f 2`;
-	__host=`echo $file | cut -d "_" -f 3`;
+	_ident=`echo $file | cut -d "." -f 4 | cut -d "-" -f 2`; # db version first part
+	_ident=$_ident'.'`echo $file | cut -d "." -f 5 | cut -d "_" -f 1`; # db version, second part (after .)
+	__host=`echo $file | cut -d "." -f 5 | cut -d "_" -f 2`;
+	__port=`echo $file | cut -d "." -f 5 | cut -d "_" -f 3`;
 	# if any of those are not set, override by the file name settings
 	if [ ! "$owner" ];
 	then
@@ -119,9 +138,14 @@ then
 		host='-h '$__host;
 		_host=$__host;
 	fi;
-	if [ -z "$encoding" ];
+	if [ ! "$encoding" ];
 	then
-		encoding=$_encoding;
+		if [ ! -z "$__encoding" ];
+		then
+			encoding=$__encoding;
+		else
+			encoding=$_encoding;
+		fi;
 	fi;
 	if [ ! "$_ident" ];
 	then
@@ -140,6 +164,9 @@ if [ "$REDHAT" -eq 1 ];
 then
 	# Debian base path
 	PG_BASE_PATH='/usr/pgsql-';
+elif [ "$AMAZON" -eq 1 ];
+then
+	PG_BASE_PATH='/usr/lib64/pgsql';
 else
 	# Redhat base path (for non official ones would be '/usr/pgsql-'
 	PG_BASE_PATH='/usr/lib/postgresql/';
@@ -207,7 +234,7 @@ else
 	echo "Drop DB $database [$_host:$_port] @ $start_time";
 	$PG_DROPDB -U postgres $host $port $database;
 	echo "Create DB $database with $owner [$_host:$_port] @ `date +"%F %T"`";
-	$PG_CREATEDB -U postgres -O $owner -E $encoding $host $port $database;
+	$PG_CREATEDB -U postgres -O $owner -E $encoding -T $TEMPLATEDB $host $port $database;
 	echo "Create plpgsql lang in DB $database [$_host:$_port] @ `date +"%F %T"`";
 	$PG_CREATELANG -U postgres plpgsql $host $port $database;
 	echo "Restore data from $file to DB $database [$_host:$_port] @ `date +"%F %T"`";
