@@ -44,6 +44,7 @@ INCLUDE=''; # space seperated list of database names
 BC='/usr/bin/bc';
 PRE_RUN_CLEAN_UP=0;
 SET_IDENT=0;
+PORT_REGEX="^[0-9]{4,5}$";
 # defaults
 _BACKUPDIR='/mnt/backup/db_dumps_fc/';
 _DB_VERSION=`pg_dump --version | grep "pg_dump" | cut -d " " -f 3 | cut -d "." -f 1,2`;
@@ -160,6 +161,12 @@ do
 		eval $name=\${!default};
 	fi;
 done;
+# check DB port is valid number
+if ! [[ "$DB_PORT" =~ $PORT_REGEX ]];
+then
+	echo "The port needs to be a valid number: $_port";
+	exit 1;
+fi;
 
 # check if we have the 'bc' command available or not
 if [ -f "$BC" ];
@@ -201,15 +208,24 @@ if [ ! -f $PG_PSQL ] || [ ! -f $PG_DUMP ] || [ ! -f $PG_DUMPALL ];
 then
 	echo "One of the core binaries (psql, pg_dump, pg_dumpall) could not be found.";
 	echo "Backup aborted";
-	exit 0;
+	exit 1;
 fi;
 
 if [ ! -d $BACKUPDIR ] ; then
 	if ! mkdir $BACKUPDIR ; then
-		echo -e "Cannot create backup directory: $BACKUPDIR\n"
-		exit 0
+		echo "Cannot create backup directory: $BACKUPDIR"
+		exit 1
 	fi
 fi
+# check if we can write into that folder
+touch $BACKUPDIR/tmpfile;
+if [ ! -f $BACKUPDIR/tmpfile ];
+then
+	echo "Cannot write to $BACKUPDIR";
+	exit 1;
+else
+	rm -f $BACKUPDIR/tmpfile;
+fi;
 
 # if we have an ident override set, set a different DUMP VERSION here than the automatic one
 if [ "$SET_IDENT" -eq 1 ];

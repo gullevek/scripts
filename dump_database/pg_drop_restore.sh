@@ -2,7 +2,7 @@
 
 # Author: Clemens Schwaighofer
 # Description:
-# Dump and restore one database
+# Drop and restore one database
 
 function usage ()
 {
@@ -30,6 +30,7 @@ TEMPLATEDB='template0';
 REDHAT=0;
 AMAZON=0;
 TEST=0;
+PORT_REGEX="^[0-9]{4,5}$";
 # if we have options, set them and then ignore anything below
 while getopts ":o:d:h:f:p:e:i:raqt" opt
 do
@@ -106,6 +107,13 @@ done;
 if [ "$REDHAT" -eq 1 ] && [ "$AMAZON" -eq 1 ];
 then
 	echo "You cannot set the -a and -r flag at the same time";
+	exit 1;
+fi;
+# check that the port is a valid number
+if ! [[ "$_port" =~ $PORT_REGEX ]];
+then
+	echo "The port needs to be a valid number: $_port";
+	exit 1;
 fi;
 
 # for the auto find, we need to get only the filename, and therefore remove all path info
@@ -133,7 +141,8 @@ then
 	then
 		database=$_database;
 	fi;
-	if [ ! "$port" ];
+	# port hast to be a valid number, at least 4 digits long and maximum 5 digits
+	if [ ! "$port" ] && [[ $__port =~ $PORT_REGEX ]] ;
 	then
 		port='-p '$__port;
 		_port=$__port;
@@ -201,8 +210,8 @@ then
 		PG_PATH=$PG_BASE_PATH$ident'/bin/';
 	else
 		# hard setting
-		ident='9.3';
-		PG_PATH=$PG_BASE_PATH'9.3/bin/';
+		ident='9.4';
+		PG_PATH=$PG_BASE_PATH'9.4/bin/';
 	fi;
 fi;
 

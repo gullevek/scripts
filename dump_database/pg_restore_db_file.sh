@@ -3,16 +3,19 @@
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} -f <dump folder> [-r] [-g]
+	Usage: ${0##/*/} -f <dump folder> [-r|-a] [-g]
 
 	-f: dump folder source. Where the database dump files are located. This is a must set option
 	-r: use redhat base paths instead of debian
+	-a: use amazon base paths instead of debian
 	-g: do not import globals file
 	EOT
 }
 
 REDHAT=0;
+AMAZON=0;
 IMPORT_GLOBALS=1;
+TEMPLATEDB='template0'; # truly empty for restore
 DUMP_FOLDER='';
 while getopts ":f:gr" opt
 do
@@ -26,6 +29,9 @@ do
 		r|redhat)
 			REDHAT=1;
 			;;
+		a|amazon)
+			AMAZON=1;
+			;;
 		h|help)
             usage;
             exit 0;
@@ -38,10 +44,19 @@ do
 	esac;
 done;
 
+if [ "$REDHAT" -eq 1 ] && [ "$AMAZON" -eq 1 ];
+then
+	echo "You cannot set the -a and -r flag at the same time";
+fi;
+
 if [ "$REDHAT" -eq 1 ];
 then
 	# Redhat base path (for non official ones would be '/usr/pgsql-'
 	DBPATH_BASE='/usr/pgsql-'
+elif [ "$AMAZON" -eq 1 ];
+then
+	# Amazon paths (lib64 default amazon package)
+	DBPATH_BASE='/usr/lib64/pgsql';
 else
 	# Debian base path
 	DBPATH_BASE='/usr/lib/postgresql/';
@@ -180,7 +195,7 @@ do
 		echo "- Drop DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
 		$DBPATH$DROPDB -U postgres $host $port $database;
 		echo "+ Create DB '$database' with '$owner' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
-		$DBPATH$CREATEDB -U postgres -O $owner -E $encoding $host $port $database;
+		$DBPATH$CREATEDB -U postgres -O $owner -E $encoding -T $TEMPLATEDB $host $port $database;
 		echo "+ Create plpgsql lang in DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
 		$DBPATH$CREATELANG -U postgres plpgsql $host $port $database;
 		echo "% Restore data from '$filename' to DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
