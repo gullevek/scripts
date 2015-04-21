@@ -7,7 +7,7 @@
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} -o <DB OWNER> -d <DB NAME> -f <FILE NAME> [-h <DB HOST>] [-p <DB PORT>] [-e <ENCODING>] [-i <POSTGRES VERSION>] [-r|-a]
+	Usage: ${0##/*/} -o <DB OWNER> -d <DB NAME> -f <FILE NAME> [-h <DB HOST>] [-p <DB PORT>] [-e <ENCODING>] [-i <POSTGRES VERSION>] [-r|-a] [-t]
 
 	-o <DB OWNER>: The user who will be owner of the database to be restored
 	-d <DB NAME>: The database to restore the file to
@@ -18,7 +18,7 @@ function usage ()
 	-i <POSTGRES VERSION>: optional postgresql version in the format X.Y, if not given the default is used (current active)
 	-r: use redhat base paths instead of debian
 	-a: use amazon base paths instead of debian
-
+	-t: test, do not do anything, just test flow
 	EOT
 }
 
@@ -29,8 +29,9 @@ NO_ASK=0;
 TEMPLATEDB='template0';
 REDHAT=0;
 AMAZON=0;
+TEST=0;
 # if we have options, set them and then ignore anything below
-while getopts ":o:d:h:f:p:e:i:raq" opt
+while getopts ":o:d:h:f:p:e:i:raqt" opt
 do
     case $opt in
         o|owner)
@@ -87,6 +88,9 @@ do
 		a|amazon)
 			AMAZON=1;
 			;;
+		t|test)
+			TEST=1;
+			;;
         h|help)
             usage;
             exit 0;
@@ -104,20 +108,22 @@ then
 	echo "You cannot set the -a and -r flag at the same time";
 fi;
 
+# for the auto find, we need to get only the filename, and therefore remove all path info
+db_file=`basename $file`;
 # if file is set and exist, but no owner or database are given, use the file name data to get user & database
 if [ -r "$file" ] && ( [ ! "$owner" ] || [ ! "$database" ] || [ ! "$encoding" ] );
 then
 	# file name format is
 	# <database>.<owner>.<encoding>.<db type>-<version>_<host>_<port>_<date>_<time>_<sequence>
 	# we only are interested in the first two
-	_database=`echo $file | cut -d "." -f 1`;
-	_owner=`echo $file | cut -d "." -f 2`;
-	__encoding=`echo $file | cut -d "." -f 3`;
+	_database=`echo $db_file | cut -d "." -f 1`;
+	_owner=`echo $db_file | cut -d "." -f 2`;
+	__encoding=`echo $db_file | cut -d "." -f 3`;
 	# set the others as optional
-	_ident=`echo $file | cut -d "." -f 4 | cut -d "-" -f 2`; # db version first part
-	_ident=$_ident'.'`echo $file | cut -d "." -f 5 | cut -d "_" -f 1`; # db version, second part (after .)
-	__host=`echo $file | cut -d "." -f 5 | cut -d "_" -f 2`;
-	__port=`echo $file | cut -d "." -f 5 | cut -d "_" -f 3`;
+	_ident=`echo $db_file | cut -d "." -f 4 | cut -d "-" -f 2`; # db version first part
+	_ident=$_ident'.'`echo $db_file | cut -d "." -f 5 | cut -d "_" -f 1`; # db version, second part (after .)
+	__host=`echo $db_file | cut -d "." -f 5 | cut -d "_" -f 2`;
+	__port=`echo $db_file | cut -d "." -f 5 | cut -d "_" -f 3`;
 	# if any of those are not set, override by the file name settings
 	if [ ! "$owner" ];
 	then
@@ -147,16 +153,21 @@ then
 			encoding=$_encoding;
 		fi;
 	fi;
-	if [ ! "$_ident" ];
+	if [ ! "$ident" ];
 	then
 		ident=$_ident;
 	fi;
 fi;
 
 # if no user or database, exist
-if [ ! "$owner" ] || [ ! "$database" ] || [ ! "$file" ] || [ ! -f "$file" ];
+if [ ! "$file" ] || [ ! -f "$file" ];
 then
-	echo "The database owner name, database name and file name have to be set via the command line options.";
+	echo "The file has not been set or the file given could not be found.";
+	exit 1;
+fi;
+if [ ! "$owner" ] || [ ! "$encoding" ] || [ ! "$database" ]
+then
+	echo "The Owner, database name and encoding could not be set automatically, the have to be given as command line options.";
 	exit 1;
 fi;
 
@@ -205,6 +216,14 @@ TEMP_FILE="temp";
 LOG_FILE_EXT=$database.`date +"%Y%m%d_%H%M%S"`".log";
 echo "USING POSTGRESQL: $ident";
 
+# core abort if no core files found
+if [ ! -f $PG_PSQL ] || [ ! -f $PG_DROPDB ] || [ ! -f $PG_CREATEDB ] || [ ! -f $PG_CREATELANG ] || [ ! -f $PG_RESTORE ];
+then
+	echo "One of the core binaries (psql, pg_dump, pg_createdb, pg_createlang, pg_restore) could not be found.";
+	echo "Backup aborted";
+	exit 0;
+fi;
+
 # check if port / host settings are OK
 # if I cannot connect with user postgres to template1, the restore won't work
 output=`echo "SELECT version();" | $PG_PSQL -U postgres $host $port template1 -q -t -X -A -F "," 2>&1`;
@@ -216,7 +235,7 @@ then
 	exit 1;
 fi;
 
-echo "Will drop database '$database' on host '$_host:$_port' and load file '$file' with user '$owner' and use database version '$ident'";
+echo "Will drop database '$database' on host '$_host:$_port' and load file '$file' with user '$owner', set encoding '$encoding' and use database version '$ident'";
 if [ $NO_ASK -eq 1 ];
 then
 	go='yes';
@@ -232,17 +251,48 @@ else
 	start_time=`date +"%F %T"`;
 	START=`date +'%s'`;
 	echo "Drop DB $database [$_host:$_port] @ $start_time";
-	$PG_DROPDB -U postgres $host $port $database;
-	echo "Create DB $database with $owner [$_host:$_port] @ `date +"%F %T"`";
-	$PG_CREATEDB -U postgres -O $owner -E $encoding -T $TEMPLATEDB $host $port $database;
+	# DROP DATABASE
+	if [ $TEST -eq 0 ];
+	then
+		$PG_DROPDB -U postgres $host $port $database;
+	else
+		echo $PG_DROPDB -U postgres $host $port $database;
+	fi;
+	# CREATE DATABASE
+	echo "Create DB $database with $owner and encoding $encoding [$_host:$_port] @ `date +"%F %T"`";
+	if [ $TEST -eq 0 ];
+	then
+		$PG_CREATEDB -U postgres -O $owner -E $encoding -T $TEMPLATEDB $host $port $database;
+	else
+		echo $PG_CREATEDB -U postgres -O $owner -E $encoding -T $TEMPLATEDB $host $port $database;
+	fi;
+	# CREATE plpgsql LANG
 	echo "Create plpgsql lang in DB $database [$_host:$_port] @ `date +"%F %T"`";
-	$PG_CREATELANG -U postgres plpgsql $host $port $database;
-	echo "Restore data from $file to DB $database [$_host:$_port] @ `date +"%F %T"`";
-	$PG_RESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>restore_errors.$LOG_FILE_EXT;
+	if [ $TEST -eq 0 ];
+	then
+		$PG_CREATELANG -U postgres plpgsql $host $port $database;
+	else
+		echo $PG_CREATELANG -U postgres plpgsql $host $port $database;
+	fi;
+	# RESTORE DATA
+	echo "Restore data from $file to DB $database and $MAX_JOBS [$_host:$_port] @ `date +"%F %T"`";
+	if [ $TEST -eq 0 ];
+	then
+		$PG_RESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>restore_errors.$LOG_FILE_EXT;
+	else
+		echo $PG_RESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>restore_errors.$LOG_FILE_EXT;
+	fi;
 	echo "Resetting all sequences from DB $database [$_host:$_post] @ `date +"%F %T"`";
-	echo "SELECT 'SELECT SETVAL(' ||quote_literal(S.relname)|| ', MAX(' ||quote_ident(C.attname)|| ') ) FROM ' ||quote_ident(T.relname)|| ';' FROM pg_class AS S, pg_depend AS D, pg_class AS T, pg_attribute AS C WHERE S.relkind = 'S' AND S.oid = D.objid AND D.refobjid = T.oid AND D.refobjid = C.attrelid AND D.refobjsubid = C.attnum ORDER BY S.relname;" | $PG_PSQL -U $owner -Atq $host $post -o $TEMP_FILE $database
-	$PG_PSQL -U $owner $host $port -e -f $TEMP_FILE $database 1>output_sequence.$LOG_FILE_EXT 2>errors_sequence.$database.$LOG_FILE_EXT;
-	rm $TEMP_FILE;
+	# SEQUENCE RESET DATA COLLECTION
+	if [ $TEST -eq 0 ];
+	then
+		echo "SELECT 'SELECT SETVAL(' ||quote_literal(S.relname)|| ', MAX(' ||quote_ident(C.attname)|| ') ) FROM ' ||quote_ident(T.relname)|| ';' FROM pg_class AS S, pg_depend AS D, pg_class AS T, pg_attribute AS C WHERE S.relkind = 'S' AND S.oid = D.objid AND D.refobjid = T.oid AND D.refobjid = C.attrelid AND D.refobjsubid = C.attnum ORDER BY S.relname;" | $PG_PSQL -U $owner -Atq $host $post -o $TEMP_FILE $database
+		$PG_PSQL -U $owner $host $port -e -f $TEMP_FILE $database 1>output_sequence.$LOG_FILE_EXT 2>errors_sequence.$database.$LOG_FILE_EXT;
+		rm $TEMP_FILE;
+	else
+		echo "SELECT 'SELECT SETVAL(' ||quote_literal(S.relname)|| ', MAX(' ||quote_ident(C.attname)|| ') ) FROM ' ||quote_ident(T.relname)|| ';' FROM pg_class AS S, pg_depend AS D, pg_class AS T, pg_attribute AS C WHERE S.relkind = 'S' AND S.oid = D.objid AND D.refobjid = T.oid AND D.refobjid = C.attrelid AND D.refobjsubid = C.attnum ORDER BY S.relname;";
+		echo $PG_PSQL -U $owner $host $port -e -f $TEMP_FILE $database 1>output_sequence.$LOG_FILE_EXT 2>errors_sequence.$database.$LOG_FILE_EXT;
+	fi;
 	echo "Restore of data $file for DB $database [$_host:$_port] finished";
 	DURATION=$[ `date +'%s'`-$START ];
 	echo "Start at $start_time and end at `date +"%F %T"` and ran for $DURATION seconds";
