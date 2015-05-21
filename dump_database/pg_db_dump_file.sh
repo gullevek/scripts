@@ -226,6 +226,13 @@ then
 else
 	rm -f $BACKUPDIR/tmpfile;
 fi;
+# check if we can connect to template1 table, if not we abort here
+connect=`$PG_PSQL -U $DB_USER $CONN_DB_HOST -p $DB_PORT -d template1 -t -A -F "," -c "SELECT datname FROM pg_catalog.pg_database WHERE datname = 'template1';"`;
+if [ "$connect" != "template1" ];
+then
+	echo "Failed to connect to template1 with user '$DB_USER' at host '$DB_HOST' on port '$DB_PORT'";
+	exit 1;
+fi;
 
 # if we have an ident override set, set a different DUMP VERSION here than the automatic one
 if [ "$SET_IDENT" -eq 1 ];

@@ -28,7 +28,7 @@ if [ -d $BK_PATH ];
 then
 	echo Starting at `date "+%Y-%m-%d %H:%M:%S"`
 	# get the hostname from the my cnf file, if not set use localhost
-	hostname=`cat /root/.my.conf |grep host|cut -d "=" -f 2|sed -e 's/"//g'`;
+	hostname=`cat $CONFIG |grep host|cut -d "=" -f 2|sed -e 's/"//g'`;
 	if [ -z "$hostname" ];
 	then
 		hostname='localhost';
@@ -67,7 +67,7 @@ then
 							event=$EVENTS;
 					fi;
 			done;
-			$MYSQL_DUMP_BIN --defaults-extra-file=$CONFIG $nolock $event --opt $db >$filename;
+			$MYSQL_DUMP_BIN --defaults-extra-file=$CONFIG $nolock $event --opt --add-drop-database --databases$db >$filename;
 			# bzip2 them
 			bzip2 $filename;
 		else
