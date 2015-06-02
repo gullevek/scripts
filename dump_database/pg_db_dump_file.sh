@@ -9,13 +9,14 @@
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} [-t] [-s] [-g] [-c] [-r|-a] [-k <number to keep>] [-b <path>] [-i <postgreSQL version>] [-d <dump database name> [-d ...]] [-e <exclude dump> [-e ...]] [-u <db user>] [-h <db host>] [-p <db port>] [-l <db password>]
+	Usage: ${0##/*/} [-t] [-s] [-g] [-c] [-r|-a] [-k <number to keep>] [-n] [-b <path>] [-i <postgreSQL version>] [-d <dump database name> [-d ...]] [-e <exclude dump> [-e ...]] [-u <db user>] [-h <db host>] [-p <db port>] [-l <db password>]
 
 	-t: test usage, no real backup is done
 	-s: turn ON ssl mode, default mode is off
 	-g: turn OFF dumping globals data, default is dumping globals data
 	-c: run clean up of old files before data is dumped. Default is run after data dump.
-	-k: keep how many backups, default is 3
+	-k <number>: keep how many backups, default is 3 days/files
+	-n: keep files in numbers not in days
 	-b <path>: backup target path, if not set, /mnt/backup/db_dumps_fc/ is used
 	-i <version>: override automatically set database version
 	-d <name>: database name to dump, option can be given multiple times, if not set all databases are dumped
@@ -32,7 +33,8 @@ function usage ()
 TEST=0; # if set to 1 will run script without doing anything
 SSLMODE=disable;
 GLOBALS=1; # if set to 0 will not dump globals
-KEEP=3; # in days, keeps KEEP+1 files, today + KEEP days before
+KEEP=3; # in days, keeps KEEP+1 files, today + KEEP days before, or keep number of files if CLEAN_NUMBER is true
+CLEAN_NUMBER=0;
 BACKUPDIR='';
 DB_VERSION=;
 DB_USER='';
@@ -58,7 +60,7 @@ REDHAT=0;
 AMAZON=0;
 
 # set options
-while getopts ":ctsgk:b:i:d:e:u:h:p:l:ra" opt
+while getopts ":ctsgnk:b:i:d:e:u:h:p:l:ra" opt
 do
 	case $opt in
 		t|test)
@@ -75,6 +77,9 @@ do
 			;;
 		k|keep)
 			KEEP=$OPTARG;
+			;;
+		n|number-keep)
+			CLEAN_NUMBER=1;
 			;;
 		b|backuppath)
 			if [ -z "$BACKUPDIR" ];
@@ -338,7 +343,7 @@ function get_dump_file_name
 	else
 		db_name="pg_globals."$DB_USER".NONE.";
 	fi;
-	file=$BACKUPDIR$db_name$DB_TYPE"-"$DUMP_DB_VERSION"_"$DB_HOST"_"$DB_PORT"_"`date +%Y%m%d`"_"`date +%H%M`"_"$sequence".c.sql";
+	file=$BACKUPDIR"/"$db_name$DB_TYPE"-"$DUMP_DB_VERSION"_"$DB_HOST"_"$DB_PORT"_"`date +%Y%m%d`"_"`date +%H%M`"_"$sequence".c.sql";
 	# we need to find the next sequence number
 	for i in `ls -1 $file 2>/dev/null`;
 	do 
@@ -359,7 +364,7 @@ function get_dump_file_name
 		sequence="01";
 	fi;
 	# now build correct file name
-	filename=$BACKUPDIR$db_name$DB_TYPE"-"$DUMP_DB_VERSION"_"$DB_HOST"_"$DB_PORT"_"`date +%Y%m%d`"_"`date +%H%M`"_"$sequence".c.sql";
+	filename=$BACKUPDIR"/"$db_name$DB_TYPE"-"$DUMP_DB_VERSION"_"$DB_HOST"_"$DB_PORT"_"`date +%Y%m%d`"_"`date +%H%M`"_"$sequence".c.sql";
 	echo "$filename";
 }
 
@@ -373,7 +378,7 @@ function get_dump_databases
 	database_names='';
 	if [ $GLOBALS -eq 1 ];
 	then
-		database_names="pg_globals* ";
+		database_names="pg_globals.* ";
 	fi;
 	for owner_db in `$PG_PSQL -U $DB_USER $CONN_DB_HOST -p $DB_PORT -d template1 -t -A -F "," -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname, pg_catalog.pg_encoding_to_char(encoding) FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)';"`
 	do
@@ -402,7 +407,7 @@ function get_dump_databases
 		fi;
 		if [ $exclude -eq 0 ] && [ $include -eq 1 ];
 		then
-			database_names=$database_names$db"* ";
+			database_names=$database_names$db".* ";
 		fi;
 	done;
 	echo $database_names;
@@ -412,27 +417,62 @@ function get_dump_databases
 # PARAMS: none
 # RETURN: none
 # CALL  : $(clean_up);
-# DESC  : checks for older files than given keep time and removes them
+# DESC  : checks for older files than given keep time/amount and removes them
 function clean_up
 {
-	if [ -d $BACKUPDIR ]; then
-		echo "Cleanup older than $KEEP days backups in $BACKUPDIR";
+	if [ -d $BACKUPDIR ];
+	then
+		if [ $CLEAN_NUMBER -eq 0 ];
+		then
+			echo "Cleanup older than $KEEP days backup in $BACKUPDIR";
+		else
+			echo "Cleanup up, keep only $KEEP backups in $BACKUPDIR";
+			# for count check we need to have +1 in keep for numeric
+			let KEEP=$KEEP+1;
+		fi;
 		# build the find string based on the search names patter
 		find_string='';
 		for name in $search_names;
 		do
-			if [ ! -z "$find_string" ];
+			# for not number based, we build the find string here
+			# else we do the delete here already
+			if [ $CLEAN_NUMBER -eq 0 ];
 			then
-				find_string=$find_string' -o ';
+				if [ ! -z "$find_string" ];
+				then
+					find_string=$find_string' -o ';
+				fi;
+				find_string=$find_string"-mtime +$KEEP -name "$name$DB_TYPE*.sql" -type f -delete -print";
+				echo "- Remove old backups for '$name'";
+			else
+				# if we do number based delete of old data, but only if the number of files is bigger than the keep number or equal if we do PRE_RUN_CLEAN_UP
+				count=`ls $BACKUPDIR"/"$name$DB_TYPE*.sql|wc -l`
+				if [ $PRE_RUN_CLEAN_UP -eq 1 ]
+				then
+					let count=$count+1;
+				fi;
+				if [ $count -gt $KEEP ];
+				then
+					echo "- Remove old backups for '$name', found $count";
+					if [ $TEST -eq 0 ];
+					then
+						#ls $name$DB_TYPE*.sql|head -n $KEEP|xargs rm;
+						echo "EMPTY FOR NOW";
+					else
+						echo "ls $BACKUPDIR/$name$DB_TYPE*.sql|head -n $KEEP|xargs rm";
+					fi;
+				fi;
 			fi;
-			find_string=$find_string"-mtime +$KEEP -name "$name$DB_TYPE*.sql" -type f -delete -print";
-			echo "- Remove old backups for '$name'";
 		done;
-		if [ $TEST -eq 0 ];
+		# if we do find (day based) delete of old data
+		if [ $CLEAN_NUMBER -eq 0 ];
 		then
-			find $BACKUPDIR $find_string;
-		else
-			echo "find $BACKUPDIR $find_string";
+			if [ $TEST -eq 0 ];
+			then
+				find $BACKUPDIR $find_string;
+			else
+				echo "find $BACKUPDIR $find_string";
+			fi;
 		fi;
 	fi
 }
@@ -459,7 +499,7 @@ if [ $GLOBALS -eq 1 ];
 then
 	echo -e -n "+ Dumping globals...\t\t"
 	filename=$(get_dump_file_name);
-	search_names="pg_globals* "; # this is used for the find/delete part
+	search_names="pg_globals.* "; # this is used for the find/delete part
 	if [ $TEST -eq 0 ];
 	then
 		$PG_DUMPALL -U $DB_USER $CONN_DB_HOST -p $DB_PORT --globals-only > $filename;
@@ -518,7 +558,7 @@ do
 	then
 		echo -n -e "+ Dumping database '$db' ...\t\t"
 		filename=$(get_dump_file_name);
-		search_names=$search_names$db"* ";
+		search_names=$search_names$db".* ";
 		SUBSTART=`date "+%s"`;
 		if [ $TEST -eq 0 ];
 		then
