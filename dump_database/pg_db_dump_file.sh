@@ -456,7 +456,7 @@ function clean_up
 					echo "- Remove old backups for '$name', found $count";
 					if [ $TEST -eq 0 ];
 					then
-						ls $name$DB_TYPE*.sql|head -n $KEEP|xargs rm;
+						ls $BACKUPDIR/$name$DB_TYPE*.sql|head -n $KEEP|xargs rm;
 					else
 						echo "ls $BACKUPDIR/$name$DB_TYPE*.sql|head -n $KEEP|xargs rm";
 					fi;
