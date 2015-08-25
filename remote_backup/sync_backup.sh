@@ -1,20 +1,88 @@
 #!/bin/bash
 
-# syncs to folders + writes log
-# used for local backup to qnas sync
+# AUTHOR: Clemens Schwaighofer
+# DATE: 2013/12/13
+# DESC: rsync data from one folder to another folder, or to a remote host. Write detailed log of what has been synced plus a control log of start and end time
+
+set -e
 
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} [-v] [-x] [-s <source folder>] [-t <target folder>]
+	Usage: ${0##/*/} [-v] [-x] [-c] [-s <source folder>] [-t <target folder>]
 
-	-v: verbose output, if used outside scripted runs
+	-v: verbose output, for use outside scripted runs
 	-x: add -X and -A rsync flag for extended attributes. Can oops certain kernels.
-	-c: do not check if source or target folder exist, can be used for remote syncs
 	-l: log file name, if not set default name is used
 	-s: source folder, must exist
 	-t: target folder, must exist
+	-c: do check if source or target folder exist
 	EOT
+}
+
+# METHOD: convert_time
+# PARAMS: timestamp in seconds or with milliseconds (nnnn.nnnn)
+# RETURN: formated string with human readable time (d/h/m/s)
+# CALL  : var=`convert_time $timestamp`;
+# DESC  : converts a timestamp or a timestamp with float milliseconds to a human readable format
+#         output is in days/hours/minutes/seconds
+function convert_time
+{
+	# check if we have bc command
+	if [ -f "/usr/bin/bc" ];
+	then
+		BC_OK=1;
+	else
+		BC_OK=0;
+	fi;
+	# input time stamp
+	timestamp=$1;
+	# round to four digits for ms
+	timestamp=`printf "%1.4f" $timestamp`;
+	# get the ms part and remove any leading 0
+	ms=`echo $timestamp | cut -d "." -f 2 | sed -e 's/^0*//'`;
+	timestamp=`echo $timestamp | cut -d "." -f 1`;
+	timegroups=(86400 3600 60 1); # day, hour, min, sec
+	timenames=("d" "h" "m" "s"); # day, hour, min, sec
+	output=( );
+	time_string=;
+	for timeslice in ${timegroups[@]};
+	do
+		# floor for the division, push to output
+		if [ $BC_OK -eq 1 ];
+		then
+			output[${#output[*]}]=`echo "$timestamp/$timeslice" | bc`;
+			timestamp=`echo "$timestamp%$timeslice" | bc`;
+		else
+			output[${#output[*]}]=$(awk "BEGIN {printf \"%d\", $timestamp/$timeslice}");
+			timestamp=$(awk "BEGIN {printf \"%d\", $timestamp%$timeslice}");
+		fi;
+	done;
+
+	for ((i=0; i<${#output[@]}; i++));
+	do
+		if [ ${output[$i]} -gt 0 ] || [ ! -z "$time_string" ];
+		then
+			if [ ! -z "$time_string" ];
+			then
+				time_string=$time_string" ";
+			fi;
+			time_string=$time_string${output[$i]}${timenames[$i]};
+		fi;
+	done;
+	if [ ! -z $ms ];
+	then
+		if [ $ms -gt 0 ];
+		then
+			time_string=$time_string" "$ms"ms";
+		fi;
+	fi;
+	# just in case the time is 0
+	if [ -z "$time_string" ];
+	then
+		time_string="0s";
+	fi;
+	echo -n "$time_string";
 }
 
 # if no verbose flag is set run, no output
@@ -22,6 +90,8 @@ VERBOSE='--partial';
 EXT_ATTRS='';
 LOG_FILE="/var/log/rsync/rsync_backup.log";
 _LOG_FILE='';
+LOG_FILE_CONTROL="/var/log/rsync/rsync_backup.control.log";
+_LOG_FILE_CONTROL='';
 CHECK=1;
 
 # set options
@@ -53,7 +123,7 @@ do
         l|logfile)
             if [ -z "$_LOG_FILE" ];
 			then
-				_LOG_FILE=$OPTARG;
+				_LOG_FILE="$OPTARG";
 			fi;
             ;;
         h|help)
@@ -76,6 +146,8 @@ then
 	if [ -f "$_LOG_FILE" ];
 	then
 		LOG_FILE=$_LOG_FILE;
+		# set new control log file in the given folder
+		LOG_FILE_CONTROL=`dirname -z $LOG_FILE`"/rsync_backup.control.log";
 	else
 		echo "Log file '$_LOG_FILE' is not writeable, fallback to '$LOG_FILE'";
 	fi;
@@ -104,6 +176,7 @@ else
 	fi;
 fi;
 
+LOG_CONTROL="tee -a ${LOG_FILE_CONTROL}";
 # run lock file, based on source target folder names (/ transformed to _)
 RUN_FOLDER='/var/run/';
 run_file=$RUN_FOLDER"rsync-script_"`echo "$SOURCE" | sed -e 's/[\/@\*:]/_/g'`'_'`echo "$TARGET" | sed -e 's/[\/@\*:]/_/g'`'.run';
@@ -142,8 +215,12 @@ echo $$ > "$run_file";
 # remove -A for nfs sync, has problems with ACL data
 basic_params='-azvi --stats --delete --exclude "lost+found" -hh';
 
-echo "Sync '$SOURCE' to '$TARGET' ...";
+script_start_time=`date +'%F %T'`;
+START=`date +'%s'`;
+echo "* ==> Sync '$SOURCE' to '$TARGET' ..." | $LOG_CONTROL;
+echo "";
 rsync $basic_params $VERBOSE $XT_ATTRS --log-file=$LOG_FILE --log-file-format="%o %i %f%L %l (%b)" $SOURCE $TARGET;
-echo "done";
+echo "";
+echo "* <== Rsync copy started at $script_start_time and finished at `date +'%F %T'` and run for `convert_time $DURATION`." | $LOG_CONTROL;
 
 rm -f "$run_file";
