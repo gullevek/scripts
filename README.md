@@ -11,3 +11,4 @@ various scripts for administration help
 * scripts: various scripts that can help with every day work
   - folder_size.sh: prints out human readable size of folders, sorted by size
 * remote_backup: script for remote backups from servers or between folders
+* screen: screen init tool via CSV file
