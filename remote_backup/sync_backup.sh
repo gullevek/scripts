@@ -217,10 +217,11 @@ basic_params='-azvi --stats --delete --exclude "lost+found" -hh';
 
 script_start_time=`date +'%F %T'`;
 START=`date +'%s'`;
-echo "* ==> Sync '$SOURCE' to '$TARGET' ..." | $LOG_CONTROL;
+echo "* ==> [`$$`] Sync '$SOURCE' to '$TARGET', start at '$script_start_time' ..." | $LOG_CONTROL;
 echo "";
 rsync $basic_params $VERBOSE $XT_ATTRS --log-file=$LOG_FILE --log-file-format="%o %i %f%L %l (%b)" $SOURCE $TARGET;
 echo "";
-echo "* <== Rsync copy started at $script_start_time and finished at `date +'%F %T'` and run for `convert_time $DURATION`." | $LOG_CONTROL;
-
+DURATION=$[ `date +'%s'`-$START ];
+echo "* <== [`$$`] Finished Rsync copy '$SOURCE' to '$TARGET' started at $script_start_time and finished at `date +'%F %T'` and run for `convert_time $DURATION`." | $LOG_CONTROL;
+# remove lock file
 rm -f "$run_file";
