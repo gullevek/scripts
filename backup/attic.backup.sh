@@ -35,6 +35,28 @@ then
 	exit 0;
 fi;
 
+# if the repository is no there, call init to create it
+# if this is user@host, we need to use ssh command to check if the file is there
+# else a normal check is ok
+INIT_REPOSITORY=0;
+if [ ! -z "$TARGET_SERVER" ];
+then
+	# remove trailing : for this
+	TARGET_SERVER=`echo "$TARGET_SERVER" | sed -e 's/://g'`;
+	# use ssh command to check remote existense
+	if [ `ssh "$TARGET_SERVER" "if [ -d \"$TARGET_FOLDER$BACKUP_FILE\" ]; then echo 1; else echo 0; fi;"` -eq 0 ];
+	then
+		INIT_REPOSITORY=1;
+	fi;
+elif [ ! -f "$REPOSITORY" ];
+then
+	INIT_REPOSITORY=1;
+fi;
+if [ $INIT_REPOSITORY -eq 1 ];
+then
+	attic init $REPOSITORY;
+fi;
+
 # base command
 COMMAND="attic create $OPT_VERBOSE -s $REPOSITORY::$DATE";
 # include list
