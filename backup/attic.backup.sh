@@ -48,7 +48,7 @@ then
 	then
 		INIT_REPOSITORY=1;
 	fi;
-elif [ ! -f "$REPOSITORY" ];
+elif [ ! -d "$REPOSITORY" ];
 then
 	INIT_REPOSITORY=1;
 fi;
