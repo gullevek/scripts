@@ -1,18 +1,11 @@
 # Attic backup wrapper scripts settings
 
-# home folder, needs to be set if there is eg a HOME=/ in the crontab
-HOME=/root/
-
-# Backup via attic, script file
-DEBUG=0;
-VERBOSE=0;
-
 # target users, etc
 TARGET_USER="";
 TARGET_HOST="";
-TARGET_FOLDER="/path/to/attic/base/";
+TARGET_FOLDER="";
 # the backup file for this host
-BACKUP_FILE="some-name-"`hostname`".attic";
+BACKUP_FILE="some-prefix-"`hostname`".attic";
 # todays date
 DATE=`date +%Y-%m-%d`;
 # post run cleanup times
