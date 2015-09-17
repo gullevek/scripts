@@ -25,7 +25,7 @@ function usage ()
 }
 
 # set options
-while getopts ":c:m:f:" opt
+while getopts ":c:m:f:h" opt
 do
 	case "${opt}" in
 		c|config)
