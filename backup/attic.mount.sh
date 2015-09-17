@@ -12,6 +12,8 @@ BASE_FOLDER="/usr/local/scripts/backup/";
 SETTINGS_FILE="attic.backup.settings";
 # base mount path (default)
 MOUNT_PATH="/mnt/restore/";
+# backup path to attic storage
+ATTIC_BACKUP_FILE='';
 
 function usage ()
 {
