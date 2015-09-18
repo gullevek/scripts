@@ -78,6 +78,9 @@ if [ ! "${TARGET_FOLDER}" ];
 then
 	echo "No target folder has been set yet";
 	exit 0;
+else
+	# add safety / in case it is missing
+	TARGET_FOLDER=${TARGET_FOLDER}"/";
 fi;
 
 # if we have user/host then we build the ssh command
@@ -142,13 +145,34 @@ do
 	# strip any leading spaces from that folder
 	include_folder=$(echo "${include_folder}" | sed -e 's/^[ \t]*//');
 	# check that those folders exist, warn on error, but do not exit unless there are no valid folders at all
-	# also skip folders that are with # in front (comment)
-	if [ ! -d "${include_folder}" ] || [[ "${include_folder}" =~ ${REGEX_COMMENT} ]];
+	# skip folders that are with # in front (comment)
+	if [[ "${include_folder}" =~ ${REGEX_COMMENT} ]];
 	then
-		echo "+ Backup folder '${include_folder}' does not exist or is not accessable";
+		echo "- [I] Do not include folder '${include_folder}'";
 	else
-		FOLDER_OK=1;
-		COMMAND=${COMMAND}" ${include_folder}";
+		# if this is a glob, do a double check that the base folder actually exists (?)
+		if [[ "${include_folder}" =~ $REGEX_GLOB ]];
+		then
+			# remove last element beyond the last /
+			# if there is no path, just allow it (general rule)
+			_include_folder=${include_folder%/*};
+			if [ ! -d "${_include_folder}" ];
+			then
+				echo "- [I] Backup folder with glob '${include_folder}' does not exist or is not accessable";
+			else
+				FOLDER_OK=1;
+				COMMAND=${COMMAND}" ${include_folder}";
+				echo "+ [I] Backup folder with glob '${include_folder}'";
+			fi;
+		# normal folder
+		elif [ ! -d "${include_folder}" ] && [ ! -e "${include_folder}" ];
+		then
+			echo "- [I] Backup folder or file '${include_folder}' does not exist or is not accessable";
+		else
+			FOLDER_OK=1;
+			COMMAND=${COMMAND}" ${include_folder}";
+			echo "+ [I] Backup folder or file '${include_folder}'";
+		fi;
 	fi;
 done<"${BASE_FOLDER}${INCLUDE_FILE}";
 # exclude list
@@ -162,18 +186,30 @@ then
 		# because of glob files etc, exclude only comments (# start)
 		if [[ "${exclude_folder}" =~ ${REGEX_COMMENT} ]];
 		then
-			echo "- Exclude folder '${exclude_folder}'";
+			echo "- [E] Exclude folder '${exclude_folder}'";
 		else
+			# if this is a glob, do a double check that the base folder actually exists (?)
+			if [[ "${exclude_folder}" =~ $REGEX_GLOB ]];
+			then
+				# remove last element beyond the last /
+				# if there is no path, just allow it (general rule)
+				_exclude_folder=${exclude_folder%/*};
+				if [ ! -d "${_exclude_folder}" ];
+				then
+					echo "- [E] Exclude folder with glob '${exclude_folder}' does not exist or is not accessable";
+				else
+					echo "${exclude_folder}" >> ${TMP_EXCLUDE_FILE};
+					echo "+ [E] Exclude folder with glob '${exclude_folder}'";
+				fi;
 			# do a warning for a possible invalid folder
 			# but we do not a exclude if the data does not exist
-			if [ ! -d "${exclude_folder}" ] && [ ! -e "${exclude_folder}" ] && [[ ! "${exclude_folder}" =~ $REGEX_GLOB ]];
+			elif [ ! -d "${exclude_folder}" ] && [ ! -e "${exclude_folder}" ];
 			then
-				if [ ${VERBOSE} -eq 1 ];
-				then
-					echo "~ Possible invalid folder '${exclude_folder}'";
-				fi;
+				echo "- [E] Exclude folder or file '${exclude_folder}' does not exist or is not accessable";
+			else
+				echo "${exclude_folder}" >> ${TMP_EXCLUDE_FILE};
+				echo "+ [E] Exclude folder or file '${exclude_folder}'";
 			fi;
-			echo "${exclude_folder}" >> ${TMP_EXCLUDE_FILE};
 		fi;
 	done<"${BASE_FOLDER}${EXCLUDE_FILE}";
 	COMMAND=${COMMAND}" --exclude-from ${TMP_EXCLUDE_FILE}";
@@ -184,20 +220,9 @@ then
 	# execute backup command
 	if [ ${DEBUG} -eq 1 ];
 	then
-		if [ -f "${TMP_EXCLUDE_FILE}" ];
-		then
-			echo "Exclude data:";
-			cat "${TMP_EXCLUDE_FILE}";
-		fi;
 		echo ${COMMAND};
 		PRUNE_DEBUG="--dry-run";
 	else
-		if [ ${VERBOSE} -eq 1 ] && [ -f "${TMP_EXCLUDE_FILE}" ];
-		then
-			echo "Excluded data from backup:";
-			cat "${TMP_EXCLUDE_FILE}";
-			echo "";
-		fi;
 		${COMMAND} || echo "[!] Attic backup aborted.";
 	fi;
 	# remove the temporary exclude file if it exists
