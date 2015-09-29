@@ -3,9 +3,10 @@
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} -f <dump folder> [-r|-a] [-g]
+	Usage: ${0##/*/} -f <dump folder> [-j <JOBS>] [-r|-a] [-g]
 
 	-f: dump folder source. Where the database dump files are located. This is a must set option
+	-j <JOBS>: Run how many jobs Parallel. If not set, 2 jobs are run parallel
 	-r: use redhat base paths instead of debian
 	-a: use amazon base paths instead of debian
 	-g: do not import globals file
@@ -17,12 +18,16 @@ AMAZON=0;
 IMPORT_GLOBALS=1;
 TEMPLATEDB='template0'; # truly empty for restore
 DUMP_FOLDER='';
-while getopts ":f:gr" opt
+MAX_JOBS='';
+while getopts ":f:j:gr" opt
 do
 	case $opt in
 		f|file)
 			DUMP_FOLDER=$OPTARG;
 			;;
+        j|jobs)
+			MAX_JOBS=${OPTARG};
+            ;;
 		g|globals)
 			IMPORT_GLOBALS=0;
 			;;
@@ -63,6 +68,30 @@ else
 fi;
 
 LOGS=$DUMP_FOLDER'logs/';
+
+NUMBER_REGEX="^[0-9]{1,}$";
+# find the max allowed jobs based on the cpu count
+# because setting more than this is not recommended
+cpu=$(cat /proc/cpuinfo | grep processor|tail -n 1);
+_max_jobs=$[ ${cpu##*: }+1 ]
+# if the MAX_JOBS is not number or smaller 1 or greate _max_jobs
+if [ ! -z "${MAX_JOBS}" ];
+then
+	# check that it is a valid number
+	if [[ ! "$MAX_JOBS" =~ "$NUMBER_REGEX" ]];
+	then
+		echo "Please enter a number for the -j option";
+		exit 1;
+	fi;
+	if [ "${MAX_JOBS}" -lt 1 ] || [ "${MAX_JOBS}" -gt 1 ];
+	then
+		echo "The value for the jobs option -j cannot be smaller than 1 or bigger than ${_max_jobs}";
+		exit 1;
+	fi;
+else
+	# auto set the MAX_JOBS based on the cpu count
+	MAX_JOBS=${_max_jobs};
+fi;
 
 if [ "$DUMP_FOLDER" = '' ];
 then
@@ -199,7 +228,7 @@ do
 		echo "+ Create plpgsql lang in DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
 		$DBPATH$CREATELANG -U postgres plpgsql $host $port $database;
 		echo "% Restore data from '$filename' to DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
-		$DBPATH$PGRESTORE -U postgres -d $database -F c -v -c -j 4 $host $port $file 2>$LOGS'/errors.'$database'.'`date +"%F_%T"`;
+		$DBPATH$PGRESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>$LOGS'/errors.'$database'.'`date +"%F_%T"`;
 		echo "$ Restore of data '$filename' for DB '$database' [$_host:$_port] finished" | $LOGFILE;
 		DURATION=$[ `date +'%s'`-$START ];
 		echo "* Start at $start_time and end at `date +"%F %T"` and ran for $DURATION seconds" | $LOGFILE;

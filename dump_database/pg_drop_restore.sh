@@ -7,7 +7,7 @@
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} -o <DB OWNER> -d <DB NAME> -f <FILE NAME> [-h <DB HOST>] [-p <DB PORT>] [-e <ENCODING>] [-i <POSTGRES VERSION>] [-r|-a] [-t]
+	Usage: ${0##/*/} -o <DB OWNER> -d <DB NAME> -f <FILE NAME> [-h <DB HOST>] [-p <DB PORT>] [-e <ENCODING>] [-i <POSTGRES VERSION>] [-j <JOBS>] [-r|-a] [-t]
 
 	-o <DB OWNER>: The user who will be owner of the database to be restored
 	-d <DB NAME>: The database to restore the file to
@@ -16,6 +16,7 @@ function usage ()
 	-p <DB PORT>: optional port number, if not given '5432' is used
 	-e <ENCODING>: optional encoding name, if not given 'UTF8' is used
 	-i <POSTGRES VERSION>: optional postgresql version in the format X.Y, if not given the default is used (current active)
+	-j <JOBS>: Run how many jobs Parallel. If not set, 2 jobs are run parallel
 	-r: use redhat base paths instead of debian
 	-a: use amazon base paths instead of debian
 	-t: test, do not do anything, just test flow
@@ -31,8 +32,9 @@ REDHAT=0;
 AMAZON=0;
 TEST=0;
 PORT_REGEX="^[0-9]{4,5}$";
+MAX_JOBS=0;
 # if we have options, set them and then ignore anything below
-while getopts ":o:d:h:f:p:e:i:raqt" opt
+while getopts ":o:d:h:f:p:e:i:j:raqt" opt
 do
     case $opt in
         o|owner)
@@ -80,6 +82,9 @@ do
                 ident=$OPTARG;
             fi;
             ;;
+        j|jobs)
+			MAX_JOBS=${OPTARG};
+            ;;
 		q|quiet)
 			NO_ASK=1;
 			;;
@@ -114,6 +119,29 @@ if ! [[ "$_port" =~ $PORT_REGEX ]];
 then
 	echo "The port needs to be a valid number: $_port";
 	exit 1;
+fi;
+NUMBER_REGEX="^[0-9]{1,}$";
+# find the max allowed jobs based on the cpu count
+# because setting more than this is not recommended
+cpu=$(cat /proc/cpuinfo | grep processor|tail -n 1);
+_max_jobs=$[ ${cpu##*: }+1 ]
+# if the MAX_JOBS is not number or smaller 1 or greate _max_jobs
+if [ ! -z "${MAX_JOBS}" ];
+then
+	# check that it is a valid number
+	if [[ ! "$MAX_JOBS" =~ "$NUMBER_REGEX" ]];
+	then
+		echo "Please enter a number for the -j option";
+		exit 1;
+	fi;
+	if [ "${MAX_JOBS}" -lt 1 ] || [ "${MAX_JOBS}" -gt 1 ];
+	then
+		echo "The value for the jobs option -j cannot be smaller than 1 or bigger than ${_max_jobs}";
+		exit 1;
+	fi;
+else
+	# auto set the MAX_JOBS based on the cpu count
+	MAX_JOBS=${_max_jobs};
 fi;
 
 # for the auto find, we need to get only the filename, and therefore remove all path info
@@ -220,7 +248,6 @@ PG_CREATEDB=$PG_PATH"createdb";
 PG_CREATELANG=$PG_PATH"createlang";
 PG_RESTORE=$PG_PATH"pg_restore";
 PG_PSQL=$PG_PATH"psql";
-MAX_JOBS=4; # if there are more CPU cores available, this can be set higher
 TEMP_FILE="temp";
 LOG_FILE_EXT=$database.`date +"%Y%m%d_%H%M%S"`".log";
 echo "USING POSTGRESQL: $ident";

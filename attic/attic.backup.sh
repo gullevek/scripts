@@ -22,6 +22,7 @@ REGEX_GLOB='\*';
 PRUNE_DEBUG='';
 INIT_REPOSITORY=0;
 FOLDER_OK=0;
+TMP_EXCLUDE_FILE='';
 
 function usage()
 {
@@ -74,7 +75,7 @@ fi;
 
 . "${BASE_FOLDER}${SETTINGS_FILE}";
 
-if [ ! "${TARGET_FOLDER}" ];
+if [ -z "${TARGET_FOLDER}" ];
 then
 	echo "No target folder has been set yet";
 	exit 0;
@@ -150,28 +151,32 @@ do
 	then
 		echo "- [I] Do not include folder '${include_folder}'";
 	else
-		# if this is a glob, do a double check that the base folder actually exists (?)
-		if [[ "${include_folder}" =~ $REGEX_GLOB ]];
+		# skip if it is empty
+		if [ ! -z "${include_folder}" ];
 		then
-			# remove last element beyond the last /
-			# if there is no path, just allow it (general rule)
-			_include_folder=${include_folder%/*};
-			if [ ! -d "${_include_folder}" ];
+			# if this is a glob, do a double check that the base folder actually exists (?)
+			if [[ "${include_folder}" =~ $REGEX_GLOB ]];
 			then
-				echo "- [I] Backup folder with glob '${include_folder}' does not exist or is not accessable";
+				# remove last element beyond the last /
+				# if there is no path, just allow it (general rule)
+				_include_folder=${include_folder%/*};
+				if [ ! -d "${_include_folder}" ];
+				then
+					echo "- [I] Backup folder with glob '${include_folder}' does not exist or is not accessable";
+				else
+					FOLDER_OK=1;
+					COMMAND=${COMMAND}" ${include_folder}";
+					echo "+ [I] Backup folder with glob '${include_folder}'";
+				fi;
+			# normal folder
+			elif [ ! -d "${include_folder}" ] && [ ! -e "${include_folder}" ];
+			then
+				echo "- [I] Backup folder or file '${include_folder}' does not exist or is not accessable";
 			else
 				FOLDER_OK=1;
 				COMMAND=${COMMAND}" ${include_folder}";
-				echo "+ [I] Backup folder with glob '${include_folder}'";
+				echo "+ [I] Backup folder or file '${include_folder}'";
 			fi;
-		# normal folder
-		elif [ ! -d "${include_folder}" ] && [ ! -e "${include_folder}" ];
-		then
-			echo "- [I] Backup folder or file '${include_folder}' does not exist or is not accessable";
-		else
-			FOLDER_OK=1;
-			COMMAND=${COMMAND}" ${include_folder}";
-			echo "+ [I] Backup folder or file '${include_folder}'";
 		fi;
 	fi;
 done<"${BASE_FOLDER}${INCLUDE_FILE}";
@@ -182,33 +187,39 @@ then
 	TMP_EXCLUDE_FILE=$(mktemp --tmpdir ${EXCLUDE_FILE}.XXXXXXXX);
 	while read exclude_folder;
 	do
+		# strip any leading spaces from that folder
+		exclude_folder=$(echo "${exclude_folder}" | sed -e 's/^[ \t]*//');
 		# folder or any type of file is ok
 		# because of glob files etc, exclude only comments (# start)
 		if [[ "${exclude_folder}" =~ ${REGEX_COMMENT} ]];
 		then
 			echo "- [E] Exclude folder '${exclude_folder}'";
 		else
-			# if this is a glob, do a double check that the base folder actually exists (?)
-			if [[ "${exclude_folder}" =~ $REGEX_GLOB ]];
+			# skip if it is empty
+			if [ ! -z "${exclude_folder}" ];
 			then
-				# remove last element beyond the last /
-				# if there is no path, just allow it (general rule)
-				_exclude_folder=${exclude_folder%/*};
-				if [ ! -d "${_exclude_folder}" ];
+				# if this is a glob, do a double check that the base folder actually exists (?)
+				if [[ "${exclude_folder}" =~ $REGEX_GLOB ]];
 				then
-					echo "- [E] Exclude folder with glob '${exclude_folder}' does not exist or is not accessable";
+					# remove last element beyond the last /
+					# if there is no path, just allow it (general rule)
+					_exclude_folder=${exclude_folder%/*};
+					if [ ! -d "${_exclude_folder}" ];
+					then
+						echo "- [E] Exclude folder with glob '${exclude_folder}' does not exist or is not accessable";
+					else
+						echo "${exclude_folder}" >> ${TMP_EXCLUDE_FILE};
+						echo "+ [E] Exclude folder with glob '${exclude_folder}'";
+					fi;
+				# do a warning for a possible invalid folder
+				# but we do not a exclude if the data does not exist
+				elif [ ! -d "${exclude_folder}" ] && [ ! -e "${exclude_folder}" ];
+				then
+					echo "- [E] Exclude folder or file '${exclude_folder}' does not exist or is not accessable";
 				else
 					echo "${exclude_folder}" >> ${TMP_EXCLUDE_FILE};
-					echo "+ [E] Exclude folder with glob '${exclude_folder}'";
+					echo "+ [E] Exclude folder or file '${exclude_folder}'";
 				fi;
-			# do a warning for a possible invalid folder
-			# but we do not a exclude if the data does not exist
-			elif [ ! -d "${exclude_folder}" ] && [ ! -e "${exclude_folder}" ];
-			then
-				echo "- [E] Exclude folder or file '${exclude_folder}' does not exist or is not accessable";
-			else
-				echo "${exclude_folder}" >> ${TMP_EXCLUDE_FILE};
-				echo "+ [E] Exclude folder or file '${exclude_folder}'";
 			fi;
 		fi;
 	done<"${BASE_FOLDER}${EXCLUDE_FILE}";
