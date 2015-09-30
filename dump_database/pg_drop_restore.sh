@@ -32,7 +32,7 @@ REDHAT=0;
 AMAZON=0;
 TEST=0;
 PORT_REGEX="^[0-9]{4,5}$";
-MAX_JOBS=0;
+MAX_JOBS='';
 # if we have options, set them and then ignore anything below
 while getopts ":o:d:h:f:p:e:i:j:raqt" opt
 do
