@@ -6,7 +6,7 @@ set -e -u -o pipefail
 # if base attic folder (backup files) does not exist, it will automatically init it
 
 # base folder
-BASE_FOLDER="/usr/local/scripts/backup/";
+BASE_FOLDER="/usr/local/scripts/attic/";
 # include and exclude file
 INCLUDE_FILE="attic.backup.include";
 EXCLUDE_FILE="attic.backup.exclude";
@@ -62,7 +62,7 @@ done;
 
 if [ ! -f "${BASE_FOLDER}${SETTINGS_FILE}" ];
 then
-	echo "No settings file could be found";
+	echo "No settings file could be found: ${BASE_FOLDER}${SETTINGS_FILE}";
 	exit 0;
 fi;
 
@@ -102,12 +102,12 @@ fi;
 REGEX="^some\-prefix\-";
 if [[ "${BACKUP_FILE}" =~ ${REGEX} ]];
 then
-	echo "The repository name still has the default prefix";
+	echo "The repository name still has the default prefix: ${BACKUP_FILE}";
 	exit 0;
 fi;
 
 # home folder, needs to be set if there is eg a HOME=/ in the crontab
-if [ ! -w "${HOME}" ];
+if [ ! -w "${HOME}" ] || [ "${HOME}" = '/' ];
 then
 	HOME=$(eval echo "$(whoami)");
 fi;

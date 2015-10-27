@@ -3,7 +3,15 @@
 # Author: Clemens Schwaighofer
 # Date: 2004/06/23
 # Description:
-# Syncs data from remote hosts
+# Dumps the DB from the foreign host and makes a sync & bzip frmo the webroot
+# History:
+# 2013/11/14 (cs) update to strict + proper command line options
+# 2005/10/17 (cs) mac & ccifj: moved login from root to the user, removed renault & careerjapan backups
+# 2005/02/28 (cs) fixed another problem that could happen if the file was wrongly named, fixed that
+# 2005/02/25 (cs) fixed a type :(
+# 2005/02/24 (cs) added prefix for other downloads, removed all DB syncs for careerjapan, now down on the server and then rsync
+# 2004/08/05 (cs) added more ...
+# 2004/07/06 (cs) added delete for old files
 
 use strict;
 use warnings;
@@ -60,7 +68,8 @@ my @backups = (
 		"sshkey" => "<PEM file>", # the -i key to use
 		"pass" => "",
 		"path" => "/local/backup/target/",
-		"keep" => "4"
+		"remote_data" => "delete", # flag remote data for delete
+		"remote_lock" => "/path/to/delete_trigger.lock"
 	},
 	## SSH KEY SYNC
 	{
@@ -122,6 +131,7 @@ for my $backup (@backups)
 		`touch $lock_file`;
 		my $date;
 		chop($date = `date +%Y%m%d`);
+		# download/dump remote database, compress and check for keep data
 		if ($backup->{'type'} eq 'mysql' || $backup->{'type'} eq 'pgsql')
 		{
 			print "[".now()."] Working on ".$backup->{'name'}." from ".$backup->{'server'}." for database: ".(($backup->{'db'}) ? $backup->{'db'} : 'ALL')."\n";
@@ -197,6 +207,7 @@ for my $backup (@backups)
 				print "[".now()."] $dumpfile already exists. Skipping\n";
 			}
 		}
+		# download remote data, compress/tar it, and check for old to delete
 		elsif ($backup->{'webroot'})
 		{
 			print "[".now()."] Working on ".$backup->{'name'}." from ".$backup->{'server'}." to ".$backup->{'webroot'}."\n";
@@ -256,7 +267,7 @@ for my $backup (@backups)
 				print "[".now()."] $backupfile already exists. Skipping\n";
 			}
 		}
-		# rsync data only
+		# rsync data only [recommended]
 		elsif ($backup->{'rsync'})
 		{
 			print "[".now()."] Working on ".$backup->{'name'}." from ".$backup->{'server'}." to ".$backup->{'rsync'}."\n";
@@ -272,10 +283,24 @@ for my $backup (@backups)
 			# please see the rsync man page for description of flags
 			print "[".now()."] Command: $rsync -Plzvruptog --delete --log-file=$rsync_log_file --log-file-format=\"$rsync_log_file_format\" --stats -e \"ssh$sshkey\" $login:$root* $path\n";
 			`$rsync -Plzvruptog --delete --log-file=$rsync_log_file --log-file-format="$rsync_log_file_format" --stats -e \"ssh$sshkey\" $login:$root* $path` if (!$test);
-		}
-		elsif ($backup->{'ftp'})
-		{
-			print "[".now()."] ***NOT IMPLEMENTED*** Working on ".$backup->{'name'}." (".$backup->{'server'}.") | ".$backup->{'rsync'}."\n";
+			# if we have remote data delete, delete all data in the remote folders, but keep the folders itself
+			if (defined($backup->{'remote_backup'}) && $backup->{'remote_data'} eq 'delete')
+			{
+				if (defined($backup->{'remote_lock'}))
+				{
+					my $remote_lock = $backup->{'remote_lock'};
+					# all data in $login:$root
+#					print "[".now()."] Command: ssh$sshkey $login \"find $path -type f -delete -print\"\n";
+#					`ssh$sskey $login "find $path -type f -delete -print"` if (!$test);
+					# user has perhaps no rights. touch a file on the remote side where then a script checks this file and cleans up the data
+					print "[".now()."] Command: ssh$sshkey $login \"touch $remote_lock\"\n";
+					`ssh$sshkey $login "touch $remote_lock"` if (!$test);
+				}
+				else
+				{
+					print "Missing remote lock file entry\n";
+				}
+			}
 		}
 		# remove lock file
 		if (-f $lock_file)
