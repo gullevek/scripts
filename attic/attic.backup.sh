@@ -175,7 +175,20 @@ do
 			else
 				FOLDER_OK=1;
 				COMMAND=${COMMAND}" ${include_folder}";
-				echo "+ [I] Backup folder or file '${include_folder}'";
+				# if it is a folder, remove the last / or the symlink check will not work
+				if [ -d "${include_folder}" ];
+				then
+					_include_folder=${include_folder%/*};
+				else
+					_include_folder=${include_folder};
+				fi;
+				# Warn if symlink & folder -> only smylink will be backed up
+				if [ -h "${_include_folder}" ];
+				then
+					echo "~ [I] Target '${include_folder}' is a symbolic link. No real data will be backed up";
+				else
+					echo "+ [I] Backup folder or file '${include_folder}'";
+				fi;
 			fi;
 		fi;
 	fi;
@@ -218,7 +231,20 @@ then
 					echo "- [E] Exclude folder or file '${exclude_folder}' does not exist or is not accessable";
 				else
 					echo "${exclude_folder}" >> ${TMP_EXCLUDE_FILE};
-					echo "+ [E] Exclude folder or file '${exclude_folder}'";
+					# if it is a folder, remove the last / or the symlink check will not work
+					if [ -d "${exclude_folder}" ];
+					then
+						_exclude_folder=${exclude_folder%/*};
+					else
+						_exclude_folder=${exclude_folder};
+					fi;
+					# warn if target is symlink folder
+					if [ -h "${_exclude_folder}" ];
+					then
+						echo "~ [I] Target '${exclude_folder}' is a symbolic link. No real data will be excluded from backup";
+					else
+						echo "+ [E] Exclude folder or file '${exclude_folder}'";
+					fi;
 				fi;
 			fi;
 		fi;

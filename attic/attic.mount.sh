@@ -57,6 +57,7 @@ then
 	exit 0;
 fi;
 
+TARGET_SERVER='';
 if [ -z "${ATTIC_BACKUP_FILE}" ];
 then
 	if [ ! -f "${BASE_FOLDER}${SETTINGS_FILE}" ];
@@ -72,6 +73,8 @@ then
 		TARGET_SERVER=${TARGET_USER}"@"${TARGET_HOST}":";
 	fi;
 	REPOSITORY=${TARGET_SERVER}${TARGET_FOLDER}${BACKUP_FILE};
+else
+	REPOSITORY=${ATTIC_BACKUP_FILE};
 fi;
 
 # check that the repostiory exists
