@@ -4,8 +4,6 @@
 # DATE: 2013/12/13
 # DESC: rsync data from one folder to another folder, or to a remote host. Write detailed log of what has been synced plus a control log of start and end time
 
-set -e
-
 function usage ()
 {
 	cat <<- EOT
