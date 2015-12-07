@@ -7,7 +7,7 @@
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} [-v] [-x] [-c] [-n] [-s <source folder>] [-t <target folder>]
+	Usage: ${0##/*/} [-v] [-x] [-c] [-n] [-e <ssh string options>] [-s <source folder>] [-t <target folder>] [-l <log file>]
 
 	-v: verbose output, for use outside scripted runs
 	-n: dry run
@@ -16,6 +16,7 @@ function usage ()
 	-s: source folder, must exist
 	-t: target folder, must exist
 	-c: do check if source or target folder exist
+	-e: turns on -e "ssh", if something is given it assumes it is the pem key and creates -e "ssh -i <key file>". turns off folder checking
 	EOT
 }
 
@@ -92,10 +93,12 @@ LOG_FILE="/var/log/rsync/rsync_backup.log";
 _LOG_FILE='';
 LOG_FILE_CONTROL="/var/log/rsync/rsync_backup.control.log";
 _LOG_FILE_CONTROL='';
+SSH_COMMAND_ON='';
+SSH_COMMAND_LINE='';
 CHECK=1;
 
 # set options
-while getopts ":vncxs:t:l:h" opt
+while getopts ":vncxs:t:l:e:h" opt
 do
     case ${opt} in
         v|verbose)
@@ -129,6 +132,16 @@ do
 				_LOG_FILE="${OPTARG}";
 			fi;
             ;;
+		e|ssh)
+			SSH_COMMAND_ON='-e ';
+			if [ ! -z "${OPTARG}" ];
+			then
+				SSH_COMMAND_LINE="ssh -i ${OPTARG}";
+			else
+				SSH_COMMAND_LINE="ssh";
+			fi;
+			CHECK=0;
+			;;
         h|help)
             usage;
             exit 0;
@@ -229,7 +242,12 @@ START=`date +'%s'`;
 PID=$$;
 echo "==> [${PID}]${_DRY_RUN} Sync '${SOURCE}' to '${TARGET}', start at '${script_start_time}' ..." | ${LOG_CONTROL};
 echo "";
-rsync ${basic_params} ${VERBOSE} ${DRY_RUN} ${EXT_ATTRS} --log-file=${LOG_FILE} --log-file-format="%o %i %f%L %l (%b)" ${SOURCE} ${TARGET};
+if [ ! -z "${SSH_COMMAND_ON}" ];
+then
+	rsync ${basic_params} ${VERBOSE} ${DRY_RUN} ${EXT_ATTRS} --log-file=${LOG_FILE} --log-file-format="%o %i %f%L %l (%b)" ${SSH_COMMAND_ON}"${SSH_COMMAND_LINE}" ${SOURCE} ${TARGET};
+else
+	rsync ${basic_params} ${VERBOSE} ${DRY_RUN} ${EXT_ATTRS} --log-file=${LOG_FILE} --log-file-format="%o %i %f%L %l (%b)" ${SOURCE} ${TARGET};
+fi;
 echo "";
 DURATION=$[ $(date +'%s')-${START} ];
 echo "<== [${PID}]${_DRY_RUN} Finished rsync copy '${SOURCE}' to '${TARGET}' started at ${script_start_time} and finished at $(date +'%F %T') and run for $(convert_time ${DURATION})." | ${LOG_CONTROL};
