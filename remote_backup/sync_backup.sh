@@ -106,7 +106,7 @@ do
             VERBOSE='-P';
             ;;
 		n|dry-run)
-			DRY_RUN='n';
+			DRY_RUN='-n';
 			;;
         x|extattr)
             EXT_ATTRS='-XA';
