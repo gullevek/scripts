@@ -7,16 +7,19 @@
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} [-v] [-x] [-c] [-n] [-e <ssh string options>] [-s <source folder>] [-t <target folder>] [-l <log file>]
+	Usage: ${0##/*/} [-d] [-v] [-x] [-c] [-n] [-e <ssh string options>] [-s <source folder>] [-t <target folder>] [-l <log file>] [-r <run folder>] [-u <exclude file> [-u ...]]
 
+	-d: debug output, shows full rsync command
 	-v: verbose output, for use outside scripted runs
 	-n: dry run
 	-x: add -X and -A rsync flag for extended attributes. Can oops certain kernels.
 	-l: log file name, if not set default name is used
+	-r: override run folder /var/run/
 	-s: source folder, must exist
 	-t: target folder, must exist
 	-c: do check if source or target folder exist
 	-e: turns on -e "ssh", if something is given it assumes it is the pem key and creates -e "ssh -i <key file>". turns off folder checking
+	-u: exclude file or folder, can be given multiple times
 	EOT
 }
 
@@ -96,11 +99,18 @@ _LOG_FILE_CONTROL='';
 SSH_COMMAND_ON='';
 SSH_COMMAND_LINE='';
 CHECK=1;
+EXCLUDE=();
+RUN_FOLDER='/var/run/';
+_RUN_FOLDER='';
+DEBUG=0;
 
 # set options
-while getopts ":vncxs:t:l:e:h" opt
+while getopts ":dvncxs:t:l:e:u:h" opt
 do
     case ${opt} in
+		d|debug)
+			DEBUG=1;
+			;;
         v|verbose)
 			# verbose flag shows output
             VERBOSE='-P';
@@ -132,6 +142,13 @@ do
 				_LOG_FILE="${OPTARG}";
 			fi;
             ;;
+        r|runfolder)
+            if [ -z "${_RUN_FOLDER}" ];
+			then
+				_RUN_FOLDER="${OPTARG}";
+				RUN_FOLDER="${_RUN_FOLDER}";
+			fi;
+            ;;
 		e|ssh)
 			SSH_COMMAND_ON='-e ';
 			if [ ! -z "${OPTARG}" ];
@@ -141,6 +158,9 @@ do
 				SSH_COMMAND_LINE="ssh";
 			fi;
 			CHECK=0;
+			;;
+		u|exclude)
+			EXCLUDE+=("${OPTARG}");
 			;;
         h|help)
             usage;
@@ -194,31 +214,33 @@ fi;
 
 LOG_CONTROL="tee -a ${LOG_FILE_CONTROL}";
 # run lock file, based on source target folder names (/ transformed to _)
-RUN_FOLDER='/var/run/';
-run_file=${RUN_FOLDER}"rsync-script_"$(echo "${SOURCE}" | sed -e 's/[\/@\*:]/_/g')'_'$(echo "${TARGET}" | sed -e 's/[\/@\*:]/_/g')'.run';
-exists=0;
-if [ -f "${run_file}" ];
+if [ -w "${RUN_FOLDER}" ];
 then
-	# check if the pid in the run file exists, if yes, abort
-	pid=$(cat "${run_file}");
-	while read _ps;
-	do
-		if [ ${_ps} -eq ${pid} ];
-		then
-			exists=1;
-			echo "Rsync script already running with pid ${pid}";
-			break;
-		fi;
-	done < <(ps xu|sed 1d|awk '{print $2}');
-	# not exited, so not running, clean up pid
-	if [ ${exists} -eq 0 ];
+	run_file=${RUN_FOLDER}"rsync-script_"$(echo "${SOURCE}" | sed -e 's/[\/@\*:]/_/g')'_'$(echo "${TARGET}" | sed -e 's/[\/@\*:]/_/g')'.run';
+	exists=0;
+	if [ -f "${run_file}" ];
 	then
-		rm -f "${run_file}";
-	else
-		exit 0;
+		# check if the pid in the run file exists, if yes, abort
+		pid=$(cat "${run_file}");
+		while read _ps;
+		do
+			if [ ${_ps} -eq ${pid} ];
+			then
+				exists=1;
+				echo "Rsync script already running with pid ${pid}";
+				break;
+			fi;
+		done < <(ps xu|sed 1d|awk '{print $2}');
+		# not exited, so not running, clean up pid
+		if [ ${exists} -eq 0 ];
+		then
+			rm -f "${run_file}";
+		else
+			exit 0;
+		fi;
 	fi;
+	echo $$ > "${run_file}";
 fi;
-echo $$ > "${run_file}";
 
 # a: archive
 # z: compress
@@ -229,8 +251,31 @@ echo $$ > "${run_file}";
 
 # remove -X for nfs sync, it screws up and oops (kernel 3.14-2)
 # remove -A for nfs sync, has problems with ACL data
-basic_params='-azvi --stats --delete --exclude "lost+found" -hh';
 
+# build the command
+cmd=(rsync -azvi --stats --delete --exclude="lost+found" -hh --log-file="${LOG_FILE}" --log-file-format="%o %i %f%L %l (%b)" ${VERBOSE} ${DRY_RUN} ${EXT_ATTRS});
+#basic_params='-azvi --stats --delete --exclude="lost+found" -hh';
+# add exclude parameters
+for exclude in "${EXCLUDE[@]}";
+do
+	cmd=("${cmd[@]}" --exclude="${exclude}");
+done;
+# add SSH command parameters
+if [ ! -z "${SSH_COMMAND_ON}" ];
+then
+	cmd=("${cmd[@]}" --rsh="${SSH_COMMAND_LINE}");
+fi;
+# final add source and target
+cmd=("${cmd[@]}" "${SOURCE}" "${TARGET}");
+# debug output
+if [ "${DEBUG}" -eq 1 ];
+then
+	for i in "${cmd[@]}";
+	do
+		echo "CMD: ${i}";
+	done;
+fi;
+# dry run prefix
 if [ ! -z "${DRY_RUN}" ];
 then
 	_DRY_RUN=' [DRY RUN]';
@@ -242,12 +287,7 @@ START=`date +'%s'`;
 PID=$$;
 echo "==> [${PID}]${_DRY_RUN} Sync '${SOURCE}' to '${TARGET}', start at '${script_start_time}' ..." | ${LOG_CONTROL};
 echo "";
-if [ ! -z "${SSH_COMMAND_ON}" ];
-then
-	rsync ${basic_params} ${VERBOSE} ${DRY_RUN} ${EXT_ATTRS} --log-file=${LOG_FILE} --log-file-format="%o %i %f%L %l (%b)" ${SSH_COMMAND_ON}"${SSH_COMMAND_LINE}" ${SOURCE} ${TARGET};
-else
-	rsync ${basic_params} ${VERBOSE} ${DRY_RUN} ${EXT_ATTRS} --log-file=${LOG_FILE} --log-file-format="%o %i %f%L %l (%b)" ${SOURCE} ${TARGET};
-fi;
+"${cmd[@]}";
 echo "";
 DURATION=$[ $(date +'%s')-${START} ];
 echo "<== [${PID}]${_DRY_RUN} Finished rsync copy '${SOURCE}' to '${TARGET}' started at ${script_start_time} and finished at $(date +'%F %T') and run for $(convert_time ${DURATION})." | ${LOG_CONTROL};
