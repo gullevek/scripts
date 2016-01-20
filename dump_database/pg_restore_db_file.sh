@@ -67,7 +67,7 @@ else
 	DBPATH_BASE='/usr/lib/postgresql/';
 fi;
 
-LOGS=$DUMP_FOLDER'logs/';
+LOGS=$DUMP_FOLDER'/logs/';
 
 NUMBER_REGEX="^[0-9]{1,}$";
 # find the max allowed jobs based on the cpu count

@@ -129,12 +129,12 @@ _max_jobs=$[ ${cpu##*: }+1 ]
 if [ ! -z "${MAX_JOBS}" ];
 then
 	# check that it is a valid number
-	if [[ ! "$MAX_JOBS" =~ "$NUMBER_REGEX" ]];
+	if ! [[ "$MAX_JOBS" =~ $NUMBER_REGEX ]];
 	then
 		echo "Please enter a number for the -j option";
 		exit 1;
 	fi;
-	if [ "${MAX_JOBS}" -lt 1 ] || [ "${MAX_JOBS}" -gt 1 ];
+	if [ "${MAX_JOBS}" -lt 1 ] || [ "${MAX_JOBS}" -gt ${_max_jobs} ];
 	then
 		echo "The value for the jobs option -j cannot be smaller than 1 or bigger than ${_max_jobs}";
 		exit 1;
