@@ -19,6 +19,7 @@ IMPORT_GLOBALS=1;
 TEMPLATEDB='template0'; # truly empty for restore
 DUMP_FOLDER='';
 MAX_JOBS='';
+BC='/usr/bin/bc';
 while getopts ":f:j:gr" opt
 do
 	case $opt in
@@ -116,6 +117,14 @@ then
 		echo "Creation of '$LOGS' folder failed";
 		exit;
 	fi;
+fi;
+
+# check if we have the 'bc' command available or not
+if [ -f "${BC}" ];
+then
+	BC_OK=1;
+else
+	BC_OK=0;
 fi;
 
 # METHOD: convert_time
@@ -318,7 +327,7 @@ do
 		DURATION=0;
 		echo "# Skipped DB '$database'" | $LOGFILE;
 	fi;
-	printf "=[$pos/$db_count]=END===[%5s seconds]========================================================>\n" $DURATION | $LOGFILE;
+	printf "=[$pos/$db_count]=END===[%s seconds]========================================================>\n" $DURATION | $LOGFILE;
 	pos=$[ $pos+1 ];
 done;
 DURATION=$[ `date +'%s'`-$MASTERSTART ];

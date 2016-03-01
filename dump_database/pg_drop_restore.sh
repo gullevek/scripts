@@ -31,6 +31,7 @@ TEMPLATEDB='template0';
 REDHAT=0;
 AMAZON=0;
 TEST=0;
+BC='/usr/bin/bc';
 PORT_REGEX="^[0-9]{4,5}$";
 MAX_JOBS='';
 # if we have options, set them and then ignore anything below
@@ -142,6 +143,14 @@ then
 else
 	# auto set the MAX_JOBS based on the cpu count
 	MAX_JOBS=${_max_jobs};
+fi;
+
+# check if we have the 'bc' command available or not
+if [ -f "${BC}" ];
+then
+	BC_OK=1;
+else
+	BC_OK=0;
 fi;
 
 # METHOD: convert_time
