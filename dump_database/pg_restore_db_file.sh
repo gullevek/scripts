@@ -118,6 +118,63 @@ then
 	fi;
 fi;
 
+# METHOD: convert_time
+# PARAMS: timestamp in seconds or with milliseconds (nnnn.nnnn)
+# RETURN: formated string with human readable time (d/h/m/s)
+# CALL  : var=$(convert_time $timestamp);
+# DESC  : converts a timestamp or a timestamp with float milliseconds to a human readable format
+#         output is in days/hours/minutes/seconds
+function convert_time
+{
+	timestamp=${1};
+	# round to four digits for ms
+	timestamp=$(printf "%1.4f" $timestamp);
+	# get the ms part and remove any leading 0
+	ms=$(echo ${timestamp} | cut -d "." -f 2 | sed -e 's/^0*//');
+	timestamp=$(echo ${timestamp} | cut -d "." -f 1);
+	timegroups=(86400 3600 60 1); # day, hour, min, sec
+	timenames=("d" "h" "m" "s"); # day, hour, min, sec
+	output=( );
+	time_string=;
+	for timeslice in ${timegroups[@]};
+	do
+		# floor for the division, push to output
+		if [ ${BC_OK} -eq 1 ];
+		then
+			output[${#output[*]}]=$(echo "${timestamp}/${timeslice}" | bc);
+			timestamp=$(echo "${timestamp}%${timeslice}" | bc);
+		else
+			output[${#output[*]}]=$(awk "BEGIN {printf \"%d\", ${timestamp}/${timeslice}}");
+			timestamp=$(awk "BEGIN {printf \"%d\", ${timestamp}%${timeslice}}");
+		fi;
+	done;
+
+	for ((i=0; i<${#output[@]}; i++));
+	do
+		if [ ${output[$i]} -gt 0 ] || [ ! -z "$time_string" ];
+		then
+			if [ ! -z "${time_string}" ];
+			then
+				time_string=${time_string}" ";
+			fi;
+			time_string=${time_string}${output[$i]}${timenames[$i]};
+		fi;
+	done;
+	if [ ! -z ${ms} ];
+	then
+		if [ ${ms} -gt 0 ];
+		then
+			time_string=${time_string}" "${ms}"ms";
+		fi;
+	fi;
+	# just in case the time is 0
+	if [ -z "${time_string}" ];
+	then
+		time_string="0s";
+	fi;
+	echo -n "${time_string}";
+}
+
 # default version (for folder)
 DBPATH_VERSION='9.4/';
 DBPATH_BIN='bin/';
@@ -188,7 +245,7 @@ then
 	echo "+ Restore globals file: $filename to [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
 	$DBPATH$PSQL -U postgres $host $port -f $file -e -q -X template1 | $LOGFILE;
 	DURATION=$[ `date +'%s'`-$START ];
-	printf "=[Globals Restore]=END===[%5s seconds]========================================================>\n" $DURATION | $LOGFILE;
+	printf "=[Globals Restore]=END===[%5s seconds]========================================================>\n" $(convert_time ${DURATION}) | $LOGFILE;
 fi;
 for file in $DUMP_FOLDER/*.sql;
 do

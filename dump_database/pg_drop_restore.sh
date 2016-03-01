@@ -144,6 +144,63 @@ else
 	MAX_JOBS=${_max_jobs};
 fi;
 
+# METHOD: convert_time
+# PARAMS: timestamp in seconds or with milliseconds (nnnn.nnnn)
+# RETURN: formated string with human readable time (d/h/m/s)
+# CALL  : var=$(convert_time $timestamp);
+# DESC  : converts a timestamp or a timestamp with float milliseconds to a human readable format
+#         output is in days/hours/minutes/seconds
+function convert_time
+{
+	timestamp=${1};
+	# round to four digits for ms
+	timestamp=$(printf "%1.4f" $timestamp);
+	# get the ms part and remove any leading 0
+	ms=$(echo ${timestamp} | cut -d "." -f 2 | sed -e 's/^0*//');
+	timestamp=$(echo ${timestamp} | cut -d "." -f 1);
+	timegroups=(86400 3600 60 1); # day, hour, min, sec
+	timenames=("d" "h" "m" "s"); # day, hour, min, sec
+	output=( );
+	time_string=;
+	for timeslice in ${timegroups[@]};
+	do
+		# floor for the division, push to output
+		if [ ${BC_OK} -eq 1 ];
+		then
+			output[${#output[*]}]=$(echo "${timestamp}/${timeslice}" | bc);
+			timestamp=$(echo "${timestamp}%${timeslice}" | bc);
+		else
+			output[${#output[*]}]=$(awk "BEGIN {printf \"%d\", ${timestamp}/${timeslice}}");
+			timestamp=$(awk "BEGIN {printf \"%d\", ${timestamp}%${timeslice}}");
+		fi;
+	done;
+
+	for ((i=0; i<${#output[@]}; i++));
+	do
+		if [ ${output[$i]} -gt 0 ] || [ ! -z "$time_string" ];
+		then
+			if [ ! -z "${time_string}" ];
+			then
+				time_string=${time_string}" ";
+			fi;
+			time_string=${time_string}${output[$i]}${timenames[$i]};
+		fi;
+	done;
+	if [ ! -z ${ms} ];
+	then
+		if [ ${ms} -gt 0 ];
+		then
+			time_string=${time_string}" "${ms}"ms";
+		fi;
+	fi;
+	# just in case the time is 0
+	if [ -z "${time_string}" ];
+	then
+		time_string="0s";
+	fi;
+	echo -n "${time_string}";
+}
+
 # for the auto find, we need to get only the filename, and therefore remove all path info
 db_file=`basename $file`;
 # if file is set and exist, but no owner or database are given, use the file name data to get user & database
@@ -331,6 +388,6 @@ else
 	fi;
 	echo "Restore of data $file for DB $database [$_host:$_port] finished";
 	DURATION=$[ `date +'%s'`-$START ];
-	echo "Start at $start_time and end at `date +"%F %T"` and ran for $DURATION seconds";
+	echo "Start at $start_time and end at `date +"%F %T"` and ran for $(convert_time ${DURATION}) seconds";
 	echo "=== END RESTORE" >>restore_errors.$LOG_FILE_EXT;
 fi;
