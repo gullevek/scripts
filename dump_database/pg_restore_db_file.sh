@@ -139,6 +139,7 @@ port='-p '$PORT;
 host='-h '$HOST;
 _port=$PORT;
 _host=$HOST;
+PORT_REGEX="^[0-9]{4,5}$";
 
 # get the count for DBs to import
 db_count=`find $DUMP_FOLDER -name "*.sql" -print | wc -l`;
@@ -163,6 +164,19 @@ then
 	filename=`basename $file`;
 	version=`echo $filename | cut -d "." -f 4 | cut -d "-" -f 2`; # db version, without prefix of DB type
 	version=$version'.'`echo $filename | cut -d "." -f 5 | cut -d "_" -f 1`; # db version, second part (after .)
+	__host=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 2`; # hostname of original DB, can be used as target host too
+	__port=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 3`; # port of original DB, can be used as target port too
+	# override file port over given port if it differs and is valid
+	if [ "$__port" != $_port ] && [[ $__port =~ $PORT_REGEX ]] ;
+	then
+		_port=$__port;
+		port='-p '$_port;
+	fi;
+	if [ "$__host" != "local" ];
+	then
+		_host=$__host;
+		host='-h '$_host;
+	fi;
 	# create the path to the DB from the DB version in the backup file
 	if [ ! -z "$version" ];
 	then
@@ -190,9 +204,20 @@ do
 	encoding=`echo $filename | cut -d "." -f 3`;
 	version=`echo $filename | cut -d "." -f 4 | cut -d "-" -f 2`; # db version, without prefix of DB type
 	version=$version'.'`echo $filename | cut -d "." -f 5 | cut -d "_" -f 1`; # db version, second part (after .)
-	host_name=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 2`; # hostname of original DB, can be used as target host too
-	dump_port=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 3`; # port of original DB, can be used as target port too
+	__host=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 2`; # hostname of original DB, can be used as target host too
+	__port=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 3`; # port of original DB, can be used as target port too
 	other=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 2-`; # backup date and time, plus sequence
+	# override file port over given port if it differs and is valid
+	if [ "$__port" != $_port ] && [[ $__port =~ $PORT_REGEX ]] ;
+	then
+		_port=$__port;
+		port='-p '$_port;
+	fi;
+	if [ "$__host" != "local" ];
+	then
+		_host=$__host;
+		host='-h '$_host;
+	fi;
 	# create the path to the DB from the DB version in the backup file
 	if [ ! -z "$version" ];
 	then
