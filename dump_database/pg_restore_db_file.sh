@@ -254,7 +254,7 @@ then
 	echo "+ Restore globals file: $filename to [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
 	$DBPATH$PSQL -U postgres $host $port -f $file -e -q -X template1 | $LOGFILE;
 	DURATION=$[ `date +'%s'`-$START ];
-	printf "=[Globals Restore]=END===[%5s seconds]========================================================>\n" $(convert_time ${DURATION}) | $LOGFILE;
+	printf "=[Globals Restore]=END===[%s seconds]========================================================>\n" $(convert_time ${DURATION}) | $LOGFILE;
 fi;
 for file in $DUMP_FOLDER/*.sql;
 do
@@ -322,14 +322,14 @@ do
 		$DBPATH$PGRESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>$LOGS'/errors.'$database'.'`date +"%F_%T"`;
 		echo "$ Restore of data '$filename' for DB '$database' [$_host:$_port] finished" | $LOGFILE;
 		DURATION=$[ `date +'%s'`-$START ];
-		echo "* Start at $start_time and end at `date +"%F %T"` and ran for $DURATION seconds" | $LOGFILE;
+		echo "* Start at $start_time and end at `date +"%F %T"` and ran for $(convert_time ${DURATION}) seconds" | $LOGFILE;
 	else
 		DURATION=0;
 		echo "# Skipped DB '$database'" | $LOGFILE;
 	fi;
-	printf "=[$pos/$db_count]=END===[%s seconds]========================================================>\n" $DURATION | $LOGFILE;
+	printf "=[$pos/$db_count]=END===[%s seconds]========================================================>\n" $(convert_time ${DURATION}) | $LOGFILE;
 	pos=$[ $pos+1 ];
 done;
 DURATION=$[ `date +'%s'`-$MASTERSTART ];
 echo "" | $LOGFILE;
-echo "= Start at $master_start_time and end at `date +"%F %T"` and ran for $DURATION seconds. Imported $db_count databases." | $LOGFILE;
+echo "= Start at $master_start_time and end at `date +"%F %T"` and ran for $(convert_time ${DURATION}) seconds. Imported $db_count databases." | $LOGFILE;
