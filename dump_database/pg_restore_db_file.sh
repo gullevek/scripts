@@ -198,7 +198,7 @@ PSQL="psql";
 PORT=5432;
 HOST='localhost';
 EXCLUDE_LIST="pg_globals"; # space separated
-LOGFILE="tee -a $LOGS/PG_RESTORE_DB_FILE.`date +"%F_%T"`.log";
+LOGFILE="tee -a $LOGS/PG_RESTORE_DB_FILE.`date +"%Y%m%d_%H%M%S"`.log";
 
 # just set port & host for internal use
 port='-p '$PORT;
@@ -319,7 +319,7 @@ do
 		echo "+ Create plpgsql lang in DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
 		$DBPATH$CREATELANG -U postgres plpgsql $host $port $database;
 		echo "% Restore data from '$filename' to DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
-		$DBPATH$PGRESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>$LOGS'/errors.'$database'.'`date +"%F_%T"`;
+		$DBPATH$PGRESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>$LOGS'/errors.'$database'.'`date +"%Y%m%d_%H%M%S".log`;
 		echo "$ Restore of data '$filename' for DB '$database' [$_host:$_port] finished" | $LOGFILE;
 		DURATION=$[ `date +'%s'`-$START ];
 		echo "* Start at $start_time and end at `date +"%F %T"` and ran for $(convert_time ${DURATION}) seconds" | $LOGFILE;
