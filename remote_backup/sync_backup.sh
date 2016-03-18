@@ -205,7 +205,7 @@ then
 	if [[ ! -d "${SOURCE}" || ! -d "${TARGET}" ]];
 	then
 		echo "Give source and target path.";
-		if [ ! -z "${SOURCE}" ] && [ ! -d "${SOURCE]}" ];
+		if [ ! -z "${SOURCE}" ] && [ ! -d "${SOURCE}" ];
 		then
 			echo "Source folder not found: ${SOURCE}";
 		fi;
