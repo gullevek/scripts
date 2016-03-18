@@ -192,9 +192,9 @@ then
 	then
 		LOG_FILE=${_LOG_FILE};
 		# set new control log file in the given folder
-		LOG_FILE_CONTROL=$(dirname -z ${LOG_FILE})"/rsync_backup.control.log";
+		LOG_FILE_CONTROL=$(dirname ${LOG_FILE})"/rsync_backup.control.log";
 		# set new transfer log file based on main log ilfe
-		LOG_FILE_TRANSFER=$(dirname -z ${LOG_FILE})"/"$(basename -z ${LOG_FILE})".transfer.log";
+		LOG_FILE_TRANSFER=$(dirname ${LOG_FILE})"/"$(basename ${LOG_FILE})".transfer.log";
 	else
 		echo "Log file '${_LOG_FILE}' is not writeable, fallback to '${LOG_FILE}'";
 	fi;
