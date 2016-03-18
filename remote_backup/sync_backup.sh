@@ -7,10 +7,10 @@
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} [-d] [-v] [-x] [-c] [-n] [-e <ssh string options>] [-s <source folder>] [-t <target folder>] [-l <log file>] [-r <run folder>] [-u <exclude file> [-u ...]]
+	Usage: ${0##/*/} [-d] [-v [-v]] [-x] [-c] [-n] [-e <ssh string options>] [-s <source folder>] [-t <target folder>] [-l <log file>] [-r <run folder>] [-u <exclude file> [-u ...]]
 
 	-d: debug output, shows full rsync command
-	-v: verbose output, for use outside scripted runs
+	-v: verbose output, for use outside scripted runs, Add a second -v to get progress output
 	-n: dry run
 	-x: add -X and -A rsync flag for extended attributes. Can oops certain kernels.
 	-l: log file name, if not set default name is used
@@ -96,6 +96,8 @@ LOG_FILE="/var/log/rsync/rsync_backup.log";
 _LOG_FILE='';
 LOG_FILE_CONTROL="/var/log/rsync/rsync_backup.control.log";
 _LOG_FILE_CONTROL='';
+LOG_FILE_TRANSFER="/var/log/rsync/rsync_backup.transfer.log";
+_LOG_FILE_TRANSFER='';
 SSH_COMMAND_ON='';
 SSH_COMMAND_LINE='';
 CHECK=1;
@@ -105,50 +107,57 @@ _RUN_FOLDER='';
 DEBUG=0;
 
 # set options
-while getopts ":dvncxs:t:l:e:u:h" opt
+while getopts ":dvncxs:t:l:e:r:u:h" opt
 do
-    case ${opt} in
+	case ${opt} in
 		d|debug)
 			DEBUG=1;
 			;;
-        v|verbose)
+		v|verbose)
 			# verbose flag shows output
-            VERBOSE='-P';
-            ;;
+			# check level, if --partial only add -vi, if --partial -vi change to -P -vi
+			if [ "${VERBOSE}" = "--partial" ];
+			then
+				VERBOSE='--partial -vi';
+			elif [ "${VERBOSE}" = "--partial -vi" ];
+			then
+				VERBOSE='-P -vi';
+			fi;
+			;;
 		n|dry-run)
 			DRY_RUN='-n';
 			;;
-        x|extattr)
-            EXT_ATTRS='-XA';
-            ;;
+		x|extattr)
+			EXT_ATTRS='-XA';
+			;;
 		c|check)
 			CHECK=0;
 			;;
-        s|source)
-            if [ -z "${SOURCE}" ];
+		s|source)
+			if [ -z "${SOURCE}" ];
 			then
 				SOURCE="${OPTARG}";
 			fi;
-            ;;
-        t|target)
-            if [ -z "${TARGET}" ];
+			;;
+		t|target)
+			if [ -z "${TARGET}" ];
 			then
 				TARGET="${OPTARG}";
 			fi;
-            ;;
-        l|logfile)
-            if [ -z "${_LOG_FILE}" ];
+			;;
+		l|logfile)
+			if [ -z "${_LOG_FILE}" ];
 			then
 				_LOG_FILE="${OPTARG}";
 			fi;
-            ;;
-        r|runfolder)
-            if [ -z "${_RUN_FOLDER}" ];
+			;;
+		r|runfolder)
+			if [ -z "${_RUN_FOLDER}" ];
 			then
 				_RUN_FOLDER="${OPTARG}";
 				RUN_FOLDER="${_RUN_FOLDER}";
 			fi;
-            ;;
+			;;
 		e|ssh)
 			SSH_COMMAND_ON='-e ';
 			if [ ! -z "${OPTARG}" ];
@@ -162,16 +171,16 @@ do
 		u|exclude)
 			EXCLUDE+=("${OPTARG}");
 			;;
-        h|help)
-            usage;
-            exit 0;
-            ;;
-        \?)
-            echo -e "\n Option does not exist: ${OPTARG}\n";
-            usage;
-            exit 1;
-            ;;
-    esac;
+		h|help)
+			usage;
+			exit 0;
+			;;
+		\?)
+			echo -e "\n Option does not exist: ${OPTARG}\n";
+			usage;
+			exit 1;
+			;;
+	esac;
 done;
 
 # use new log file path, if the folder is ok and writeable
@@ -184,6 +193,8 @@ then
 		LOG_FILE=${_LOG_FILE};
 		# set new control log file in the given folder
 		LOG_FILE_CONTROL=$(dirname -z ${LOG_FILE})"/rsync_backup.control.log";
+		# set new transfer log file based on main log ilfe
+		LOG_FILE_TRANSFER=$(dirname -z ${LOG_FILE})"/"$(basename -z ${LOG_FILE})".transfer.log";
 	else
 		echo "Log file '${_LOG_FILE}' is not writeable, fallback to '${LOG_FILE}'";
 	fi;
@@ -213,6 +224,7 @@ else
 fi;
 
 LOG_CONTROL="tee -a ${LOG_FILE_CONTROL}";
+LOG_TRANSFER="tee -a ${LOG_FILE_TRANSFER}";
 # run lock file, based on source target folder names (/ transformed to _)
 if [ -w "${RUN_FOLDER}" ];
 then
@@ -253,7 +265,7 @@ fi;
 # remove -A for nfs sync, has problems with ACL data
 
 # build the command
-cmd=(rsync -azvi --stats --delete --exclude="lost+found" -hh --log-file="${LOG_FILE}" --log-file-format="%o %i %f%L %l (%b)" ${VERBOSE} ${DRY_RUN} ${EXT_ATTRS});
+cmd=(rsync -az --stats --delete --exclude="lost+found" -hh --log-file="${LOG_FILE}" --log-file-format="%o %i %f%L %l (%b)" ${VERBOSE} ${DRY_RUN} ${EXT_ATTRS});
 #basic_params='-azvi --stats --delete --exclude="lost+found" -hh';
 # add exclude parameters
 for exclude in "${EXCLUDE[@]}";
@@ -285,11 +297,9 @@ fi;
 script_start_time=`date +'%F %T'`;
 START=`date +'%s'`;
 PID=$$;
-echo "==> [${PID}]${_DRY_RUN} Sync '${SOURCE}' to '${TARGET}', start at '${script_start_time}' ..." | ${LOG_CONTROL};
-echo "";
-"${cmd[@]}";
-echo "";
+echo "==> [${PID}]${_DRY_RUN} Sync '${SOURCE}' to '${TARGET}', start at '${script_start_time}' ..." | ${LOG_CONTROL} | ${LOG_TRANSFER};
+"${cmd[@]}" | ${LOG_TRANSFER};
 DURATION=$[ $(date +'%s')-${START} ];
-echo "<== [${PID}]${_DRY_RUN} Finished rsync copy '${SOURCE}' to '${TARGET}' started at ${script_start_time} and finished at $(date +'%F %T') and run for $(convert_time ${DURATION})." | ${LOG_CONTROL};
+echo "<== [${PID}]${_DRY_RUN} Finished rsync copy '${SOURCE}' to '${TARGET}' started at ${script_start_time} and finished at $(date +'%F %T') and run for $(convert_time ${DURATION})." | ${LOG_CONTROL} | ${LOG_TRANSFER};
 # remove lock file
 rm -f "${run_file}";
