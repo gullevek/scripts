@@ -7,10 +7,12 @@
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} [-d] [-v [-v]] [-x] [-c] [-n] [-e <ssh string options>] [-s <source folder>] [-t <target folder>] [-l <log file>] [-r <run folder>] [-u <exclude file> [-u ...]]
+	Usage: ${0##/*/} [-d] [-v [-v]] [-p [-p]] [-o <precision>] [-x] [-c] [-n] [-e <ssh string options>] [-s <source folder>] [-t <target folder>] [-l <log file>] [-r <run folder>] [-u <exclude file> [-u ...]]
 
 	-d: debug output, shows full rsync command
-	-v: verbose output, for use outside scripted runs, Add a second -v to get progress output
+	-v: verbose output. If not given data is only written to log files. -v1 is only stats out, -v2 is also progress info out if -p is given
+	-p: do progress calculation, if two -p are given, also percent data is calculated
+	-o: change the percent precision from the default two. Must be a valud numeric number from 0 to 9
 	-n: dry run
 	-x: add -X and -A rsync flag for extended attributes. Can oops certain kernels.
 	-l: log file name, if not set default name is used
@@ -88,40 +90,149 @@ function convert_time
 	echo -n "${time_string}";
 }
 
+# METHOD: pipe
+# PARAMS: string piped into
+# RETURN: progress info as string
+# CALL  : echo "string" | pipe | ...
+# DESC  : if xfer/xfr data is present calcualtes overall progress
+#       : if PROGRESS = 1, do progress calc, else just print stats to output
+# VARIABLES OUTSIDE:
+# set to check to zero for final stats output
+STATS=0;
+# print a new line before stats
+FIRST_STATS=1;
+# START METHOD:
+function pipe
+{
+	while read data;
+	do
+		if [ ${PROGRESS} -ge 1 ];
+		then
+			case "${data}" in
+				*xfer\#*|*xfr\#*)
+					# ${string#*=} to get nnn/mmm)
+					# $(string%/*} to get nnn [from nnn/mmm)]
+					# ${string%/*)} to get mmmm [from nnn/mmm)]
+					tmp_data=${data#*#};
+					xfer_files=${tmp_data%,*};
+					tmp_data=${data#*=};
+					to_check=${tmp_data%/*};
+					tmp_data=${tmp_data#*/};
+					max_check=${tmp_data%)};
+					datetime=$(date +"%F %T");
+					# do only awk percent calculation if we have two progress flags set
+					if [ ${PROGRESS} -eq 2 ];
+					then
+						percent_done=$(awk "BEGIN {printf \"%.${PRECISION}f\", (($max_check-$to_check)/$max_check) * 100}")"%";
+						percent_xfer=$(awk "BEGIN {printf \"%.${PRECISION}f\", (($xfer_files)/$max_check) * 100}")"%";
+						string=$(printf "[%s] Done: %${PRINTF_PRECISION}s (Xfer: %${PRINTF_PRECISION}s) | Checked: %'d, Open to transfer: %'d, Transfered: %'d\n" "${datetime}" ${percent_done} ${percent_xfer} ${max_check} ${to_check} ${xfer_files});
+					else
+						string=$(printf "[%s] Checked: %'d, Open to transfer: %'d, Transfered: %'d\n" "${datetime}" ${max_check} ${to_check} ${xfer_files});
+					fi;
+					# in case we have two verbose, print to std out
+					if [ ${VERBOSE} -ge 2 ];
+					then
+						echo "${string}" | ${LOG_PROGRESS};
+					else
+						echo "${string}" | ${LOG_PROGRESS} > /dev/null;
+					fi;
+				;;
+				"Number of files"*)
+					STATS=1;
+				;;
+			esac
+		else
+			# if no progress is given, just print out stats
+			case "${data}" in
+				"Number of files"*)
+					STATS=1;
+				;;
+			esac
+		fi;
+		# output stats to progress part
+		if [ ${STATS} -eq 1 ];
+		then
+			if [ ${FIRST_STATS} -eq 1 ];
+			then
+				FIRST_STATS=0;
+				echo "" | ${LOG_PROGRESS};
+			fi;
+			echo "${data}" | ${LOG_PROGRESS};
+		fi;
+	done;
+}
+
+# METHOD: output
+# PARAMS: string piped into
+# RETURN: putput or nothing
+# CALL  : echo "string" | output
+# DESC  : if verbose is set, print to STDOUT
+function output
+{
+	while read data;
+	do
+		if [ ${VERBOSE} -ge 1 ];
+		then
+			echo "${data}" | ${LOG_CONTROL} | ${LOG_TRANSFER} | ${LOG_PROGRESS};
+		else
+			echo "${data}" | ${LOG_CONTROL} | ${LOG_TRANSFER} | ${LOG_PROGRESS} > /dev/null;
+		fi;
+	done;
+}
+
 # if no verbose flag is set run, no output
-VERBOSE='--partial';
+VERBOSE=0;
+PROGRESS=0;
+# always set attribute for rsync
+VERBOSE_ATTRS='-P';
+# dry run, do not actually copy any data
 DRY_RUN='';
+# extended attributes for ACL sync (default not set)
 EXT_ATTRS='';
-LOG_FILE="/var/log/rsync/rsync_backup.log";
+# command line given
 _LOG_FILE='';
-LOG_FILE_CONTROL="/var/log/rsync/rsync_backup.control.log";
-_LOG_FILE_CONTROL='';
-LOG_FILE_TRANSFER="/var/log/rsync/rsync_backup.transfer.log";
-_LOG_FILE_TRANSFER='';
+# default log sets
+LOG_FILE_RSYNC="/var/log/rsync/rsync_backup.rsync.log"; # log written from rsync
+LOG_FILE_CONTROL="/var/log/rsync/rsync_backup.control.log"; # central control log (logs only start/end, is shared between sessions)
+LOG_FILE_TRANSFER="/var/log/rsync/rsync_backup.transfer.log"; # rsync output (has percent progress per file, xfr, chk data)
+LOG_FILE_PROGRESS="/var/log/rsync/rsync_backup.progress.log" # progress output with stats
+# ssh command
 SSH_COMMAND_ON='';
 SSH_COMMAND_LINE='';
+# folder check
 CHECK=1;
+# rsync exclude folders
 EXCLUDE=();
+# run lock file
 RUN_FOLDER='/var/run/';
 _RUN_FOLDER='';
+# debug flag (prints out rsync command)
 DEBUG=0;
+# percent precision
+PRECISION=2;
+_PRECISION='';
+# regex check for precision
+PRECISION_REGEX="^[0-9]{1}$";
 
 # set options
-while getopts ":dvncxs:t:l:e:r:u:h" opt
+while getopts ":dvpo:ncxs:t:l:e:r:u:h" opt
 do
 	case ${opt} in
 		d|debug)
 			DEBUG=1;
 			;;
 		v|verbose)
-			# verbose flag shows output
-			# check level, if --partial only add -vi, if --partial -vi change to -P -vi
-			if [ "${VERBOSE}" = "--partial" ];
+			# verbose flag shows output on the command line, each -v increases the verbose
+			let VERBOSE=${VERBOSE}+1;
+			;;
+		p|progress)
+			# verbose flag shows output on the command line, each -v increases the verbose
+			let PROGRESS=${PROGRESS}+1;
+			;;
+		o|precision)
+			if [ -z "${_PRECISION}" ];
 			then
-				VERBOSE='--partial -vi';
-			elif [ "${VERBOSE}" = "--partial -vi" ];
-			then
-				VERBOSE='-P -vi';
+				_PRECISION=${OPTARG};
 			fi;
 			;;
 		n|dry-run)
@@ -183,6 +294,27 @@ do
 	esac;
 done;
 
+# only check precision if progress is 2
+if [ ${PROGRESS} -ge 2 ] && [ ! -s "${_PRECISION}" ];
+then
+	# check that the precision is in the range from 0 to 9
+	if ! [[ "${_PRECISION}" =~ ${PRECISION_REGEX} ]];
+	then
+		echo "The -o parameter needs to be in the range from 0 to 9";
+		exit 1;
+	else
+		PRECISION=${_PRECISION};
+	fi;
+fi;
+# set the printf precision for percent output
+if [ ${PRECISION} -eq 0 ];
+then
+	DEFAULT_PRINTF_PRECISION=4;
+else
+	DEFAULT_PRINTF_PRECISION=5;
+fi;
+PRINTF_PRECISION=$[ $DEFAULT_PRINTF_PRECISION+$PRECISION ];
+
 # use new log file path, if the folder is ok and writeable
 if [ ! -z "${_LOG_FILE}" ];
 then
@@ -190,13 +322,17 @@ then
 	touch "${_LOG_FILE}";
 	if [ -f "${_LOG_FILE}" ];
 	then
-		LOG_FILE=${_LOG_FILE};
 		# set new control log file in the given folder
-		LOG_FILE_CONTROL=$(dirname ${LOG_FILE})"/rsync_backup.control.log";
-		# set new transfer log file based on main log ilfe
-		LOG_FILE_TRANSFER=$(dirname ${LOG_FILE})"/"$(basename ${LOG_FILE})".transfer.log";
+		LOG_FILE_CONTROL=$(dirname ${_LOG_FILE})"/rsync_backup.control.log";
+		# rsync log file
+		LOG_FILE_RSYNC=$(dirname ${_LOG_FILE})"/"$(basename ${_LOG_FILE})".rsync.log";
+		# transfer log file for direct rsync output
+		LOG_FILE_TRANSFER=$(dirname ${_LOG_FILE})"/"$(basename ${_LOG_FILE})".transfer.log";
+		# progress and stats log file
+		LOG_FILE_PROGRESS=$(dirname ${_LOG_FILE})"/"$(basename ${_LOG_FILE})".progress.log";
 	else
-		echo "Log file '${_LOG_FILE}' is not writeable, fallback to '${LOG_FILE}'";
+		echo "Log file '${_LOG_FILE}' is not writeable, fallback to '${LOG_FILE_RSYNC}'";
+		# check for log file too
 	fi;
 fi;
 
@@ -225,6 +361,7 @@ fi;
 
 LOG_CONTROL="tee -a ${LOG_FILE_CONTROL}";
 LOG_TRANSFER="tee -a ${LOG_FILE_TRANSFER}";
+LOG_PROGRESS="tee -a ${LOG_FILE_PROGRESS}";
 # run lock file, based on source target folder names (/ transformed to _)
 if [ -w "${RUN_FOLDER}" ];
 then
@@ -265,7 +402,7 @@ fi;
 # remove -A for nfs sync, has problems with ACL data
 
 # build the command
-cmd=(rsync -az --stats --delete --exclude="lost+found" -hh --log-file="${LOG_FILE}" --log-file-format="%o %i %f%L %l (%b)" ${VERBOSE} ${DRY_RUN} ${EXT_ATTRS});
+cmd=(rsync -az --stats --delete --exclude="lost+found" -hh --log-file="${LOG_FILE_RSYNC}" --log-file-format="%o %i %f%L %l (%b)" ${VERBOSE_ATTRS} ${DRY_RUN} ${EXT_ATTRS});
 #basic_params='-azvi --stats --delete --exclude="lost+found" -hh';
 # add exclude parameters
 for exclude in "${EXCLUDE[@]}";
@@ -284,7 +421,7 @@ if [ "${DEBUG}" -eq 1 ];
 then
 	for i in "${cmd[@]}";
 	do
-		echo "CMD: ${i}";
+		echo "CMD: ${i}" | ${LOG_TRANSFER} | ${LOG_PROGRESS};
 	done;
 fi;
 # dry run prefix
@@ -297,9 +434,20 @@ fi;
 script_start_time=`date +'%F %T'`;
 START=`date +'%s'`;
 PID=$$;
-echo "==> [${PID}]${_DRY_RUN} Sync '${SOURCE}' to '${TARGET}', start at '${script_start_time}' ..." | ${LOG_CONTROL} | ${LOG_TRANSFER};
-"${cmd[@]}" | ${LOG_TRANSFER};
+echo "==> [${PID}]${_DRY_RUN} Sync '${SOURCE}' to '${TARGET}', start at ${script_start_time} ..." | output;
+# output of overall progress if verbose is set to 1
+# if verbose is set to 2 it is also printed to console
+# 2: only stats
+# 3: stats and progress
+# 4: stats and progress with percent
+if [ ${VERBOSE} -ge 1 ];
+then
+	"${cmd[@]}" | ${LOG_TRANSFER} | pipe;
+else
+	# if no verbose is given, just write to transfer log and that is it
+	"${cmd[@]}" | ${LOG_TRANSFER} | pipe > /dev/null;
+fi;
 DURATION=$[ $(date +'%s')-${START} ];
-echo "<== [${PID}]${_DRY_RUN} Finished rsync copy '${SOURCE}' to '${TARGET}' started at ${script_start_time} and finished at $(date +'%F %T') and run for $(convert_time ${DURATION})." | ${LOG_CONTROL} | ${LOG_TRANSFER};
+echo "<== [${PID}]${_DRY_RUN} Finished rsync copy '${SOURCE}' to '${TARGET}' started at ${script_start_time} and finished at $(date +'%F %T') and run for $(convert_time ${DURATION})." | output;
 # remove lock file
 rm -f "${run_file}";
