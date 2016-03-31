@@ -33,13 +33,6 @@ function usage ()
 #         output is in days/hours/minutes/seconds
 function convert_time
 {
-	# check if we have bc command
-	if [ -f "/usr/bin/bc" ];
-	then
-		BC_OK=1;
-	else
-		BC_OK=0;
-	fi;
 	# input time stamp
 	timestamp=${1};
 	# round to four digits for ms
@@ -53,15 +46,8 @@ function convert_time
 	time_string=;
 	for timeslice in ${timegroups[@]};
 	do
-		# floor for the division, push to output
-		if [ ${BC_OK} -eq 1 ];
-		then
-			output[${#output[*]}]=$(echo "${timestamp}/${timeslice}" | bc);
-			timestamp=$(echo "${timestamp}%${timeslice}" | bc);
-		else
-			output[${#output[*]}]=$(awk "BEGIN {printf \"%d\", ${timestamp}/${timeslice}}");
-			timestamp=$(awk "BEGIN {printf \"%d\", ${timestamp}%${timeslice}}");
-		fi;
+		output[${#output[*]}]=$(awk "BEGIN {printf \"%d\", ${timestamp}/${timeslice}}");
+		timestamp=$(awk "BEGIN {printf \"%d\", ${timestamp}%${timeslice}}");
 	done;
 
 	for ((i=0; i<${#output[@]}; i++));
@@ -173,9 +159,9 @@ function output
 	do
 		if [ ${VERBOSE} -ge 1 ];
 		then
-			echo "${data}" | ${LOG_CONTROL} | ${LOG_TRANSFER} | ${LOG_PROGRESS};
+			echo "${data}" | ${LOG_CONTROL} | ${LOG_TRANSFER} | ${LOG_ERROR} | ${LOG_PROGRESS};
 		else
-			echo "${data}" | ${LOG_CONTROL} | ${LOG_TRANSFER} | ${LOG_PROGRESS} > /dev/null;
+			echo "${data}" | ${LOG_CONTROL} | ${LOG_TRANSFER} | ${LOG_ERROR} | ${LOG_PROGRESS} > /dev/null;
 		fi;
 	done;
 }
@@ -195,6 +181,7 @@ _LOG_FILE='';
 LOG_FILE_RSYNC="/var/log/rsync/rsync_backup.rsync.log"; # log written from rsync
 LOG_FILE_CONTROL="/var/log/rsync/rsync_backup.control.log"; # central control log (logs only start/end, is shared between sessions)
 LOG_FILE_TRANSFER="/var/log/rsync/rsync_backup.transfer.log"; # rsync output (has percent progress per file, xfr, chk data)
+LOG_FILE_ERROR="/var/log/rsync/rsync_backup.error.log"; # STDERR from rsync log
 LOG_FILE_PROGRESS="/var/log/rsync/rsync_backup.progress.log" # progress output with stats
 # ssh command
 SSH_COMMAND_ON='';
@@ -328,6 +315,8 @@ then
 		LOG_FILE_RSYNC=$(dirname ${_LOG_FILE})"/"$(basename ${_LOG_FILE})".rsync.log";
 		# transfer log file for direct rsync output
 		LOG_FILE_TRANSFER=$(dirname ${_LOG_FILE})"/"$(basename ${_LOG_FILE})".transfer.log";
+		# rsync STDERR output
+		LOG_FILE_ERROR=$(dirname ${_LOG_FILE})"/"$(basename ${_LOG_FILE})".error.log";
 		# progress and stats log file
 		LOG_FILE_PROGRESS=$(dirname ${_LOG_FILE})"/"$(basename ${_LOG_FILE})".progress.log";
 	else
@@ -361,6 +350,7 @@ fi;
 
 LOG_CONTROL="tee -a ${LOG_FILE_CONTROL}";
 LOG_TRANSFER="tee -a ${LOG_FILE_TRANSFER}";
+LOG_ERROR="tee -a ${LOG_FILE_ERROR}";
 LOG_PROGRESS="tee -a ${LOG_FILE_PROGRESS}";
 # run lock file, based on source target folder names (/ transformed to _)
 if [ -w "${RUN_FOLDER}" ];
@@ -442,10 +432,18 @@ echo "==> [${PID}]${_DRY_RUN} Sync '${SOURCE}' to '${TARGET}', start at ${script
 # 4: stats and progress with percent
 if [ ${VERBOSE} -ge 1 ];
 then
-	"${cmd[@]}" | ${LOG_TRANSFER} | pipe;
+	# stdout to transfer log & pipe and then to stdout, error to error log and to null unless verbose is set to three
+	if [ ${VERBOSE} -ge 3 ];
+	then
+		"${cmd[@]}" > >(${LOG_TRANSFER} | pipe) 2> >(${LOG_ERROR} >&2);
+	else
+		"${cmd[@]}" > >(${LOG_TRANSFER} | pipe) 2> >(${LOG_ERROR} >/dev/null);
+	fi;
 else
 	# if no verbose is given, just write to transfer log and that is it
-	"${cmd[@]}" | ${LOG_TRANSFER} | pipe > /dev/null;
+	# all stdout/stderr is to dev null
+	"${cmd[@]}" > >(${LOG_TRANSFER} | pipe) 2> >(${LOG_ERROR}) 2>&1>/dev/null;
+
 fi;
 DURATION=$[ $(date +'%s')-${START} ];
 echo "<== [${PID}]${_DRY_RUN} Finished rsync copy '${SOURCE}' to '${TARGET}' started at ${script_start_time} and finished at $(date +'%F %T') and run for $(convert_time ${DURATION})." | output;
