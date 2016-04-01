@@ -309,6 +309,11 @@ then
 	touch "${_LOG_FILE}";
 	if [ -f "${_LOG_FILE}" ];
 	then
+		# if the _LOG_FILE is size 0 (just touched), remove it
+		if [ ! -s "${_LOG_FILE}" ];
+		then
+			rm "${_LOG_FILE}";
+		fi;
 		# set new control log file in the given folder
 		LOG_FILE_CONTROL=$(dirname ${_LOG_FILE})"/rsync_backup.control.log";
 		# rsync log file
@@ -442,7 +447,7 @@ then
 else
 	# if no verbose is given, just write to transfer log and that is it
 	# all stdout/stderr is to dev null
-	"${cmd[@]}" > >(${LOG_TRANSFER} | pipe) 2> >(${LOG_ERROR}) 2>&1>/dev/null;
+	"${cmd[@]}" > >(${LOG_TRANSFER} | pipe >/dev/null) 2> >(${LOG_ERROR} >/dev/null);
 
 fi;
 DURATION=$[ $(date +'%s')-${START} ];
