@@ -7,7 +7,7 @@
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} [-d] [-v [-v]] [-p [-p]] [-o <precision>] [-x] [-c] [-n] [-e <ssh string options>] [-s <source folder>] [-t <target folder>] [-l <log file>] [-r <run folder>] [-u <exclude file> [-u ...]]
+	Usage: ${0##/*/} [-d] [-v [-v]] [-p [-p]] [-o <precision>] [-x] [-c] [-n] [-e <ssh string options>] [-s <source folder>] [-t <target folder>] [-l <log file>] [-r <run folder>] [-u <exclude file> [-u ...]] [-f <exclude pattern file>]
 
 	-d: debug output, shows full rsync command
 	-v: verbose output. If not given data is only written to log files. -v1 is only stats out, -v2 is also progress info out if -p is given
@@ -22,6 +22,8 @@ function usage ()
 	-c: do check if source or target folder exist
 	-e: turns on -e "ssh", if something is given it assumes it is the pem key and creates -e "ssh -i <key file>". turns off folder checking
 	-u: exclude file or folder, can be given multiple times
+	-f: exclude from file (see rsync for PATTERN description)
+
 	EOT
 }
 
@@ -111,9 +113,9 @@ function pipe
 					then
 						percent_done=$(awk "BEGIN {printf \"%.${PRECISION}f\", (($max_check-$to_check)/$max_check) * 100}")"%";
 						percent_xfer=$(awk "BEGIN {printf \"%.${PRECISION}f\", (($xfer_files)/$max_check) * 100}")"%";
-						string=$(printf "[%s] Done: %${PRINTF_PRECISION}s (Xfer: %${PRINTF_PRECISION}s) | Checked: %'d, Open to transfer: %'d, Transfered: %'d\n" "${datetime}" ${percent_done} ${percent_xfer} ${max_check} ${to_check} ${xfer_files});
+						string=$(printf "[%s] [%s] Done: %${PRINTF_PRECISION}s (Xfer: %${PRINTF_PRECISION}s) | Checked: %'d, Open to transfer: %'d, Transfered: %'d\n" "${datetime}" ${PID} ${percent_done} ${percent_xfer} ${max_check} ${to_check} ${xfer_files});
 					else
-						string=$(printf "[%s] Checked: %'d, Open to transfer: %'d, Transfered: %'d\n" "${datetime}" ${max_check} ${to_check} ${xfer_files});
+						string=$(printf "[%s] [%s] Checked: %'d, Open to transfer: %'d, Transfered: %'d\n" "${datetime}" ${PID} ${max_check} ${to_check} ${xfer_files});
 					fi;
 					# in case we have two verbose, print to std out
 					if [ ${VERBOSE} -ge 2 ];
@@ -190,6 +192,7 @@ SSH_COMMAND_LINE='';
 CHECK=1;
 # rsync exclude folders
 EXCLUDE=();
+EXCLUDE_FROM='';
 # run lock file
 RUN_FOLDER='/var/run/';
 _RUN_FOLDER='';
@@ -202,7 +205,7 @@ _PRECISION='';
 PRECISION_REGEX="^[0-9]{1}$";
 
 # set options
-while getopts ":dvpo:ncxs:t:l:e:r:u:h" opt
+while getopts ":dvpo:ncxs:t:l:e:r:u:f:h" opt
 do
 	case ${opt} in
 		d|debug)
@@ -269,6 +272,12 @@ do
 		u|exclude)
 			EXCLUDE+=("${OPTARG}");
 			;;
+		f|exclude-from-file)
+			if [ -z "${EXCLUDE_FROM}" ];
+			then
+				EXCLUDE_FROM="${OPTARG}";
+			fi;
+			;;
 		h|help)
 			usage;
 			exit 0;
@@ -287,7 +296,7 @@ then
 	# check that the precision is in the range from 0 to 9
 	if ! [[ "${_PRECISION}" =~ ${PRECISION_REGEX} ]];
 	then
-		echo "The -o parameter needs to be in the range from 0 to 9";
+		echo "The -o parameter needs to be in the range from 0 to 9.";
 		exit 1;
 	else
 		PRECISION=${_PRECISION};
@@ -307,7 +316,7 @@ if [ ! -z "${_LOG_FILE}" ];
 then
 	# check if this is valid writeable file
 	touch "${_LOG_FILE}";
-	if [ -f "${_LOG_FILE}" ];
+	if [ -w "${_LOG_FILE}" ];
 	then
 		# if the _LOG_FILE is size 0 (just touched), remove it
 		if [ ! -s "${_LOG_FILE}" ];
@@ -328,8 +337,17 @@ then
 		echo "Log file '${_LOG_FILE}' is not writeable, fallback to '${LOG_FILE_RSYNC}'";
 		# check for log file too
 	fi;
+else
+	# do check if we can write to log global
+	touch "${LOG_FILE_RSYNC}";
+	if [ ! -w "${LOG_FILE_RSYNC}" ];
+	then
+		echo "Cannot write to log file ${LOG_FILE_RSYNC}.";
+		exit;
+	fi;
 fi;
 
+# if check is enabled, check that both folders are directories
 if [ ${CHECK} -eq 1 ];
 then
 	if [[ ! -d "${SOURCE}" || ! -d "${TARGET}" ]];
@@ -351,6 +369,32 @@ else
 		echo "Give source and target path.";
 		exit;
 	fi;
+fi;
+
+# check that the exclude from file is readable
+if [ ! -z "${EXCLUDE_FROM}" ] && [ ! -f "${EXCLUDE_FROM}" ];
+then
+	echo "Cannot read the exclude from file: ${EXCLUDE_FROM}.";
+	exit;
+fi;
+# check that EXCLUDE & EXCLUDE_FROM are not both set
+if [ ! -z "${EXCLUDE_FROM}" ] && [ ${#EXCLUDE[*]} -ne 0 ];
+then
+	echo "-u (exculude) and -f (exclude from file) cannot be set at the same time.";
+	exit;
+fi;
+
+# check that we can write to the run folder
+if [ ! -w "${RUN_FOLDER}" ];
+then
+	echo "Cannot write to ${RUN_FOLDER} and will not create lock file.";
+	echo "Waiting 5 seconds for abort: ";
+	for ((i=5;i>=1;i--));
+	do
+		echo -n $i" ";
+		sleep 1;
+	done;
+	echo " ";
 fi;
 
 LOG_CONTROL="tee -a ${LOG_FILE_CONTROL}";
@@ -397,13 +441,18 @@ fi;
 # remove -A for nfs sync, has problems with ACL data
 
 # build the command
-cmd=(rsync -az --stats --delete --exclude="lost+found" -hh --log-file="${LOG_FILE_RSYNC}" --log-file-format="%o %i %f%L %l (%b)" ${VERBOSE_ATTRS} ${DRY_RUN} ${EXT_ATTRS});
+# log format: Operation, Info of transfer, [permissions, user, group], file transfered, symlink/hardlink info, [file size in bytes & human readable, bytes transfered & humand readable]
+cmd=(rsync -az --stats --delete --exclude="lost+found" -hh --log-file="${LOG_FILE_RSYNC}" --log-file-format="%o %i [%B:%4U:%4G] %f%L %'l [--> {%''l} => %'b {%''b}]" ${VERBOSE_ATTRS} ${DRY_RUN} ${EXT_ATTRS});
 #basic_params='-azvi --stats --delete --exclude="lost+found" -hh';
 # add exclude parameters
 for exclude in "${EXCLUDE[@]}";
 do
 	cmd=("${cmd[@]}" --exclude="${exclude}");
 done;
+if [ ! -z "${EXCLUDE_FROM}" ];
+then
+	cmd=("${cmd[@]}" --exclude-from="${EXCLUDE_FROM}");
+fi;
 # add SSH command parameters
 if [ ! -z "${SSH_COMMAND_ON}" ];
 then
@@ -453,4 +502,7 @@ fi;
 DURATION=$[ $(date +'%s')-${START} ];
 echo "<== [${PID}]${_DRY_RUN} Finished rsync copy '${SOURCE}' to '${TARGET}' started at ${script_start_time} and finished at $(date +'%F %T') and run for $(convert_time ${DURATION})." | output;
 # remove lock file
-rm -f "${run_file}";
+if [ -f "${run_file}" ];
+then
+	rm -f "${run_file}";
+fi;
