@@ -442,7 +442,7 @@ fi;
 
 # build the command
 # log format: Operation, Info of transfer, [permissions, user, group], file transfered, symlink/hardlink info, [file size in bytes & human readable, bytes transfered & humand readable]
-cmd=(rsync -az --stats --delete --exclude="lost+found" -hh --log-file="${LOG_FILE_RSYNC}" --log-file-format="%o %i [%B:%4U:%4G] %f%L %'l [--> {%''l} => %'b {%''b}]" ${VERBOSE_ATTRS} ${DRY_RUN} ${EXT_ATTRS});
+cmd=(rsync -az --stats --delete --exclude="lost+found" -hh --log-file="${LOG_FILE_RSYNC}" --log-file-format="%o %i [%B:%4U:%4G] %f%L [--> %'l {%''l} => %'b {%''b}]" ${VERBOSE_ATTRS} ${DRY_RUN} ${EXT_ATTRS});
 #basic_params='-azvi --stats --delete --exclude="lost+found" -hh';
 # add exclude parameters
 for exclude in "${EXCLUDE[@]}";
