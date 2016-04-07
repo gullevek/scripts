@@ -203,6 +203,17 @@ PRECISION=2;
 _PRECISION='';
 # regex check for precision
 PRECISION_REGEX="^[0-9]{1}$";
+# log format for version >= 3.x, anything lower can't do format (')
+RSYNC_LOG_FORMAT='';
+RSYNC_VERSION=$(rsync --version | grep "version");
+RSYNC_VERSION=${RSYNC_VERSION%%protocol*};
+RSYNC_VERSION=${RSYNC_VERSION##*version};
+if [ $(echo "${RSYNC_VERSION}" | cut -d "." -f 1) -lt 3 ];
+then
+	RSYNC_LOG_FORMAT="%o %i [%B:%4U:%4G] %f%L [--> %l => %b]";
+else
+	RSYNC_LOG_FORMAT="%o %i [%B:%4U:%4G] %f%L [--> %'l {%''l} => %'b {%''b}]";
+fi;
 
 # set options
 while getopts ":dvpo:ncxs:t:l:e:r:u:f:h" opt
@@ -442,7 +453,7 @@ fi;
 
 # build the command
 # log format: Operation, Info of transfer, [permissions, user, group], file transfered, symlink/hardlink info, [file size in bytes & human readable, bytes transfered & humand readable]
-cmd=(rsync -az --stats --delete --exclude="lost+found" -hh --log-file="${LOG_FILE_RSYNC}" --log-file-format="%o %i [%B:%4U:%4G] %f%L [--> %'l {%''l} => %'b {%''b}]" ${VERBOSE_ATTRS} ${DRY_RUN} ${EXT_ATTRS});
+cmd=(rsync -az --stats --delete --exclude="lost+found" -hh --log-file="${LOG_FILE_RSYNC}" --log-file-format="${RSYNC_LOG_FORMAT}" ${VERBOSE_ATTRS} ${DRY_RUN} ${EXT_ATTRS});
 #basic_params='-azvi --stats --delete --exclude="lost+found" -hh';
 # add exclude parameters
 for exclude in "${EXCLUDE[@]}";
