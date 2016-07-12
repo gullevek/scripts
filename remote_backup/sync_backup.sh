@@ -7,12 +7,13 @@
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} [-d] [-v [-v]] [-p [-p]] [-o <precision>] [-x] [-c] [-n] [-e <ssh string options>] [-s <source folder>] [-t <target folder>] [-l <log file>] [-r <run folder>] [-u <exclude file> [-u ...]] [-f <exclude pattern file>]
+	Usage: ${0##/*/} [-d] [-v [-v]] [-p [-p]] [-o <precision>] [-x] [-c] [-n] [-k] [-e <ssh string options>] [-s <source folder>] [-t <target folder>] [-l <log file>] [-r <run folder>] [-u <exclude file> [-u ...]] [-f <exclude pattern file>]
 
 	-d: debug output, shows full rsync command
 	-v: verbose output. If not given data is only written to log files. -v1 is only stats out, -v2 is also progress info out if -p is given
 	-p: do progress calculation, if two -p are given, also percent data is calculated
 	-o: change the percent precision from the default two. Must be a valud numeric number from 0 to 9
+	-k: use the rsync -c (checksum) flag. Will make rsync much slower
 	-n: dry run
 	-x: add -X and -A rsync flag for extended attributes. Can oops certain kernels.
 	-l: log file name, if not set default name is used
@@ -216,7 +217,7 @@ else
 fi;
 
 # set options
-while getopts ":dvpo:ncxs:t:l:e:r:u:f:h" opt
+while getopts ":dvpo:nkcxs:t:l:e:r:u:f:h" opt
 do
 	case ${opt} in
 		d|debug)
@@ -238,6 +239,9 @@ do
 			;;
 		n|dry-run)
 			DRY_RUN='-n';
+			;;
+		k|checksum)
+			CHECKSUM='-c';
 			;;
 		x|extattr)
 			EXT_ATTRS='-XA';
@@ -453,7 +457,7 @@ fi;
 
 # build the command
 # log format: Operation, Info of transfer, [permissions, user, group], file transfered, symlink/hardlink info, [file size in bytes & human readable, bytes transfered & humand readable]
-cmd=(rsync -az --stats --delete --exclude="lost+found" -hh --log-file="${LOG_FILE_RSYNC}" --log-file-format="${RSYNC_LOG_FORMAT}" ${VERBOSE_ATTRS} ${DRY_RUN} ${EXT_ATTRS});
+cmd=(rsync -az --stats --delete --exclude="lost+found" -hh --log-file="${LOG_FILE_RSYNC}" --log-file-format="${RSYNC_LOG_FORMAT}" ${VERBOSE_ATTRS} ${DRY_RUN} ${CHECKSUM} ${EXT_ATTRS});
 #basic_params='-azvi --stats --delete --exclude="lost+found" -hh';
 # add exclude parameters
 for exclude in "${EXCLUDE[@]}";
@@ -486,10 +490,17 @@ then
 else
 	_DRY_RUN='';
 fi;
+# checksum prefix
+if [ ! -z "${CHECKSUM}" ];
+then
+	_CHECKSUM=' [CHECKSUM]';
+else
+	_CHECKSUM='';
+fi;
 script_start_time=`date +'%F %T'`;
 START=`date +'%s'`;
 PID=$$;
-echo "==> [${PID}]${_DRY_RUN} Sync '${SOURCE}' to '${TARGET}', start at ${script_start_time} ..." | output;
+echo "==> [${PID}]${_DRY_RUN}${_CHECKSUM} Sync '${SOURCE}' to '${TARGET}', start at ${script_start_time} ..." | output;
 # output of overall progress if verbose is set to 1
 # if verbose is set to 2 it is also printed to console
 # 2: only stats
@@ -511,7 +522,7 @@ else
 
 fi;
 DURATION=$[ $(date +'%s')-${START} ];
-echo "<== [${PID}]${_DRY_RUN} Finished rsync copy '${SOURCE}' to '${TARGET}' started at ${script_start_time} and finished at $(date +'%F %T') and run for $(convert_time ${DURATION})." | output;
+echo "<== [${PID}]${_DRY_RUN}${_CHECKSUM} Finished rsync copy '${SOURCE}' to '${TARGET}' started at ${script_start_time} and finished at $(date +'%F %T') and run for $(convert_time ${DURATION})." | output;
 # remove lock file
 if [ -f "${run_file}" ];
 then
