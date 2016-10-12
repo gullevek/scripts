@@ -20,6 +20,7 @@ function usage ()
 _port=5432
 _host='local';
 _encoding='UTF8';
+set_encoding='';
 REDHAT=0;
 AMAZON=0;
 IMPORT_GLOBALS=1;
@@ -306,6 +307,8 @@ do
 	start_time=`date +"%F %T"`;
 	START=`date +'%s'`;
 	echo "=[$pos/$db_count]=START=[$start_time]==================================================>" | $LOGFILE;
+	# the encoding
+	set_encoding='';
 	# get the filename
 	filename=`basename $file`;
 	# get the databse, user
@@ -334,14 +337,20 @@ do
 		_host=$__host;
 		host='-h '$_host;
 	fi;
-	# overrid encoding (dangerous)
-	if [ ! "$encoding" ];
+	# override encoding (dangerous)
+	# check if we have a master override
+	if [ ! "$encoding" ]
+	then
+		set_encoding=$encoding;
+	fi;
+	# if no override encoding set first from file, then from global
+	if [ ! "$set_encoding" ];
 	then
 		if [ ! -z "$__encoding" ];
 		then
-			encoding=$__encoding;
+			set_encoding=$__encoding;
 		else
-			encoding=$_encoding;
+			set_encoding=$_encoding;
 		fi;
 	fi;
 	# create the path to the DB from the DB version in the backup file
@@ -387,9 +396,9 @@ do
 		echo "+ Create DB '$database' with '$owner' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
 		if [ ${DRY_RUN} -eq 0 ];
 		then
-			$DBPATH$CREATEDB -U postgres -O $owner -E $encoding -T $TEMPLATEDB $host $port $database;
+			$DBPATH$CREATEDB -U postgres -O $owner -E $set_encoding -T $TEMPLATEDB $host $port $database;
 		else
-			echo "$DBPATH$CREATEDB -U postgres -O $owner -E $encoding -T $TEMPLATEDB $host $port $database";
+			echo "$DBPATH$CREATEDB -U postgres -O $owner -E $set_encoding -T $TEMPLATEDB $host $port $database";
 		fi;
 		echo "+ Create plpgsql lang in DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
 		if [ ${DRY_RUN} -eq 0 ];
