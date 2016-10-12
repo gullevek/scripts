@@ -225,6 +225,11 @@ function convert_time
 
 # default version (for folder)
 DBPATH_VERSION='9.4/';
+# if amazon remove "." from version
+if [ "${AMAZON}" -eq 1 ];
+then
+	DBPATH_VERSION=$(echo "${DBPATH_VERSION}" | sed -e 's/\.//');
+fi;
 DBPATH_BIN='bin/';
 # postgresql binaries
 DROPDB="dropdb";
@@ -260,6 +265,11 @@ then
 	filename=`basename $file`;
 	version=`echo $filename | cut -d "." -f 4 | cut -d "-" -f 2`; # db version, without prefix of DB type
 	version=$version'.'`echo $filename | cut -d "." -f 5 | cut -d "_" -f 1`; # db version, second part (after .)
+	# if amazon remove "." from version
+	if [ "${AMAZON}" -eq 1 ];
+	then
+		version=$(echo "${version}" | sed -e 's/\.//');
+	fi;
 	__host=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 2`; # hostname of original DB, can be used as target host too
 	__port=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 3`; # port of original DB, can be used as target port too
 	# override file port over given port if it differs and is valid
@@ -305,6 +315,11 @@ do
 	__encoding=`echo $filename | cut -d "." -f 3`;
 	version=`echo $filename | cut -d "." -f 4 | cut -d "-" -f 2`; # db version, without prefix of DB type
 	version=$version'.'`echo $filename | cut -d "." -f 5 | cut -d "_" -f 1`; # db version, second part (after .)
+	# if amazon remove "." from version
+	if [ "${AMAZON}" -eq 1 ];
+	then
+		version=$(echo "${version}" | sed -e 's/\.//');
+	fi;
 	__host=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 2`; # hostname of original DB, can be used as target host too
 	__port=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 3`; # port of original DB, can be used as target port too
 	other=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 2-`; # backup date and time, plus sequence
