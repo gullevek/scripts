@@ -3,16 +3,23 @@
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} -f <dump folder> [-j <JOBS>] [-r|-a] [-g]
+	Usage: ${0##/*/} -f <dump folder> [-j <JOBS>] [-e <ENCODING>] [-h <HOST>] [-r|-a] [-g] [-n]
 
+	-e <ENCODING>: override global encoding, will be overruled by per file encoding
+	-p <PORT>: override default port from file.
+	-h <HOST>: override default host from file.
 	-f: dump folder source. Where the database dump files are located. This is a must set option
 	-j <JOBS>: Run how many jobs Parallel. If not set, 2 jobs are run parallel
 	-r: use redhat base paths instead of debian
 	-a: use amazon base paths instead of debian
 	-g: do not import globals file
+	-n: dry run, do not import or change anything
 	EOT
 }
 
+_port=5432
+_host='local';
+_encoding='UTF8';
 REDHAT=0;
 AMAZON=0;
 IMPORT_GLOBALS=1;
@@ -20,7 +27,10 @@ TEMPLATEDB='template0'; # truly empty for restore
 DUMP_FOLDER='';
 MAX_JOBS='';
 BC='/usr/bin/bc';
-while getopts ":f:j:gr" opt
+PORT_REGEX="^[0-9]{4,5}$";
+DRY_RUN=0;
+# options check
+while getopts ":f:j:h:p:e:gran" opt
 do
 	case $opt in
 		f|file)
@@ -28,6 +38,26 @@ do
 			;;
         j|jobs)
 			MAX_JOBS=${OPTARG};
+            ;;
+		e|encoding)
+			if [ -z "$encoding" ];
+			then
+				encoding=$OPTARG;
+			fi;
+			;;
+		h|hostname)
+            if [ -z "$host" ];
+            then
+				host='-h '$OPTARG;
+				_host=$OPTARG;
+            fi;
+            ;;
+        p|port)
+            if [ -z "$port" ];
+            then
+				port='-p '$OPTARG;
+				_port=$OPTARG;
+            fi;
             ;;
 		g|globals)
 			IMPORT_GLOBALS=0;
@@ -37,6 +67,9 @@ do
 			;;
 		a|amazon)
 			AMAZON=1;
+			;;
+		n|dry-run)
+			DRY_RUN=1;
 			;;
 		h|help)
             usage;
@@ -68,7 +101,12 @@ else
 	DBPATH_BASE='/usr/lib/postgresql/';
 fi;
 
-LOGS=$DUMP_FOLDER'/logs/';
+# check that the port is a valid number
+if ! [[ "$_port" =~ $PORT_REGEX ]];
+then
+	echo "The port needs to be a valid number: $_port";
+	exit 1;
+fi;
 
 NUMBER_REGEX="^[0-9]{1,}$";
 # find the max allowed jobs based on the cpu count
@@ -107,6 +145,7 @@ then
 	exit;
 fi;
 
+LOGS=$DUMP_FOLDER'/logs/';
 # create logs folder if missing
 if [ ! -d "$LOGS" ];
 then
@@ -195,17 +234,8 @@ PGRESTORE="pg_restore";
 CREATEUSER="createuser";
 PSQL="psql";
 # default port and host
-PORT=5432;
-HOST='localhost';
 EXCLUDE_LIST="pg_globals"; # space separated
 LOGFILE="tee -a $LOGS/PG_RESTORE_DB_FILE.`date +"%Y%m%d_%H%M%S"`.log";
-
-# just set port & host for internal use
-port='-p '$PORT;
-host='-h '$HOST;
-_port=$PORT;
-_host=$HOST;
-PORT_REGEX="^[0-9]{4,5}$";
 
 # get the count for DBs to import
 db_count=`find $DUMP_FOLDER -name "*.sql" -print | wc -l`;
@@ -233,12 +263,12 @@ then
 	__host=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 2`; # hostname of original DB, can be used as target host too
 	__port=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 3`; # port of original DB, can be used as target port too
 	# override file port over given port if it differs and is valid
-	if [ "$__port" != $_port ] && [[ $__port =~ $PORT_REGEX ]] ;
+	if [ -z $_port ] && [ "$__port" != $_port ] && [[ $__port =~ $PORT_REGEX ]] ;
 	then
 		_port=$__port;
 		port='-p '$_port;
 	fi;
-	if [ "$__host" != "local" ];
+	if [ -z "$_host" ] && [ "$__host" != "local" ];
 	then
 		_host=$__host;
 		host='-h '$_host;
@@ -252,7 +282,12 @@ then
 	fi;
 	DBPATH=$DBPATH_BASE$DBPATH_VERSION_LOCAL$DBPATH_BIN;
 	echo "+ Restore globals file: $filename to [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
-	$DBPATH$PSQL -U postgres $host $port -f $file -e -q -X template1 | $LOGFILE;
+	if [ ${DRY_RUN} -eq 0 ];
+	then
+		$DBPATH$PSQL -U postgres $host $port -f $file -e -q -X template1 | $LOGFILE;
+	else
+		echo "$DBPATH$PSQL -U postgres $host $port -f $file -e -q -X template1" | $LOGFILE;
+	fi;
 	DURATION=$[ `date +'%s'`-$START ];
 	printf "=[Globals Restore]=END===[%s seconds]========================================================>\n" $(convert_time ${DURATION}) | $LOGFILE;
 fi;
@@ -267,22 +302,32 @@ do
 	# default file name is <database>.<owner>.<encoding>.<type>-<version>_<host>_<port>_<date>_<time>_<sequence>
 	database=`echo $filename | cut -d "." -f 1`;
 	owner=`echo $filename | cut -d "." -f 2`;
-	encoding=`echo $filename | cut -d "." -f 3`;
+	__encoding=`echo $filename | cut -d "." -f 3`;
 	version=`echo $filename | cut -d "." -f 4 | cut -d "-" -f 2`; # db version, without prefix of DB type
 	version=$version'.'`echo $filename | cut -d "." -f 5 | cut -d "_" -f 1`; # db version, second part (after .)
 	__host=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 2`; # hostname of original DB, can be used as target host too
 	__port=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 3`; # port of original DB, can be used as target port too
 	other=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 2-`; # backup date and time, plus sequence
 	# override file port over given port if it differs and is valid
-	if [ "$__port" != $_port ] && [[ $__port =~ $PORT_REGEX ]] ;
+	if [ -z $_port ] && [ "$__port" != $_port ] && [[ $__port =~ $PORT_REGEX ]] ;
 	then
 		_port=$__port;
 		port='-p '$_port;
 	fi;
-	if [ "$__host" != "local" ];
+	if [ -z "$_host" ] && [ "$__host" != "local" ];
 	then
 		_host=$__host;
 		host='-h '$_host;
+	fi;
+	# overrid encoding (dangerous)
+	if [ ! "$encoding" ];
+	then
+		if [ ! -z "$__encoding" ];
+		then
+			encoding=$__encoding;
+		else
+			encoding=$_encoding;
+		fi;
 	fi;
 	# create the path to the DB from the DB version in the backup file
 	if [ ! -z "$version" ];
@@ -309,17 +354,42 @@ do
 		if [ -z $user_oid ];
 		then
 			echo "+ Create USER '$owner' for DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
-			$CREATEUSER -U postgres -D -R -S $host $port $owner;
+			if [ ${DRY_RUN} -eq 0 ];
+			then
+				$CREATEUSER -U postgres -D -R -S $host $port $owner;
+			else
+				echo "$CREATEUSER -U postgres -D -R -S $host $port $owner";
+			fi;
 		fi;
 		# before importing the data, drop this database
 		echo "- Drop DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
-		$DBPATH$DROPDB -U postgres $host $port $database;
+		if [ ${DRY_RUN} -eq 0 ];
+		then
+			$DBPATH$DROPDB -U postgres $host $port $database;
+		else
+			echo "$DBPATH$DROPDB -U postgres $host $port $database";
+		fi;
 		echo "+ Create DB '$database' with '$owner' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
-		$DBPATH$CREATEDB -U postgres -O $owner -E $encoding -T $TEMPLATEDB $host $port $database;
+		if [ ${DRY_RUN} -eq 0 ];
+		then
+			$DBPATH$CREATEDB -U postgres -O $owner -E $encoding -T $TEMPLATEDB $host $port $database;
+		else
+			echo "$DBPATH$CREATEDB -U postgres -O $owner -E $encoding -T $TEMPLATEDB $host $port $database";
+		fi;
 		echo "+ Create plpgsql lang in DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
-		$DBPATH$CREATELANG -U postgres plpgsql $host $port $database;
+		if [ ${DRY_RUN} -eq 0 ];
+		then
+			$DBPATH$CREATELANG -U postgres plpgsql $host $port $database;
+		else
+			echo "$DBPATH$CREATELANG -U postgres plpgsql $host $port $database";
+		fi;
 		echo "% Restore data from '$filename' to DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
-		$DBPATH$PGRESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>$LOGS'/errors.'$database'.'`date +"%Y%m%d_%H%M%S".log`;
+		if [ ${DRY_RUN} -eq 0 ];
+		then
+			$DBPATH$PGRESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>$LOGS'/errors.'$database'.'$(date +"%Y%m%d_%H%M%S".log);
+		else
+			echo "$DBPATH$PGRESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>$LOGS'/errors.'$database'.'$(date +"%Y%m%d_%H%M%S".log)";
+		fi;
 		echo "$ Restore of data '$filename' for DB '$database' [$_host:$_port] finished" | $LOGFILE;
 		DURATION=$[ `date +'%s'`-$START ];
 		echo "* Start at $start_time and end at `date +"%F %T"` and ran for $(convert_time ${DURATION}) seconds" | $LOGFILE;
