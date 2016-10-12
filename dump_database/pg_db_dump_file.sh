@@ -238,7 +238,7 @@ else
 	rm -f ${BACKUPDIR}/tmpfile;
 fi;
 # check if we can connect to template1 table, if not we abort here
-connect=$(${PG_PSQL} -U "${DB_USER}" ${CONN_DB_HOST} -p ${DB_PORT} -d template1 -t -A -F "," -c "SELECT datname FROM pg_catalog.pg_database WHERE datname = 'template1';") || echo "[!] pgsql connect error";
+connect=$(${PG_PSQL} -U "${DB_USER}" ${CONN_DB_HOST} -p ${DB_PORT} -d template1 -t -A -F "," -X -q -c "SELECT datname FROM pg_catalog.pg_database WHERE datname = 'template1';") || echo "[!] pgsql connect error";
 if [ "${connect}" != "template1" ];
 then
 	echo "Failed to connect to template1 with user '${DB_USER}' at host '${DB_HOST}' on port '${DB_PORT}'";
@@ -388,7 +388,7 @@ function get_dump_databases
 	then
 		search_names+=("pg_globals.*");
 	fi;
-	for owner_db in $(${PG_PSQL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -d template1 -t -A -F "," -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname, pg_catalog.pg_encoding_to_char(encoding) FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)';")
+	for owner_db in $(${PG_PSQL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -d template1 -t -A -F "," -X -q -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname, pg_catalog.pg_encoding_to_char(encoding) FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)';")
 	do
 		db=$(echo ${owner_db} | cut -d "," -f 2);
 		# check if we exclude this db
@@ -532,7 +532,7 @@ else
 	echo ${EXCLUDE};
 fi;
 
-for owner_db in $(${PG_PSQL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -d template1 -t -A -F "," -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname, pg_catalog.pg_encoding_to_char(encoding) AS encoding FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)';")
+for owner_db in $(${PG_PSQL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -d template1 -t -A -F "," -X -q -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname, pg_catalog.pg_encoding_to_char(encoding) AS encoding FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)';")
 do
 	# get the user who owns the DB too
 	owner=$(echo ${owner_db} | cut -d "," -f 1);
