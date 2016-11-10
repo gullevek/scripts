@@ -453,7 +453,8 @@ function clean_up
 				echo "- Remove old backups for '${name}'";
 			else
 				# if we do number based delete of old data, but only if the number of files is bigger than the keep number or equal if we do PRE_RUN_CLEAN_UP
-				count=$(ls ${BACKUPDIR}"/"${name}${DB_TYPE}*.sql | wc -l)
+				# this can be error, but we allow it -> script should not abort here
+				count=$(ls ${BACKUPDIR}"/"${name}${DB_TYPE}*.sql | wc -l) || true;
 				if [ ${PRE_RUN_CLEAN_UP} -eq 1 ]
 				then
 					let count=${count}+1;
@@ -504,6 +505,8 @@ search_names=();
 if [ ${GLOBALS} -eq 1 ];
 then
 	echo -e -n "+ Dumping globals...\t\t"
+	# reset any previous set db name from deletes so the correct global file name is set
+	db='';
 	filename=$(get_dump_file_name);
 	search_names+=("pg_globals.*"); # this is used for the find/delete part
 	if [ ${TEST} -eq 0 ];
