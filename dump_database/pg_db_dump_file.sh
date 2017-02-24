@@ -461,12 +461,16 @@ function clean_up
 				fi;
 				if [ ${count} -gt ${KEEP} ];
 				then
-					echo "- Remove old backups for '${name}', found ${count}";
+					# calculate the amount to delete
+					# eg if we want to keep 1, and we have 3 files then we need to delete 2
+					# keep is always +1 (include the to backup count). count is +1 if we do a pre-run cleanup
+					let TO_DELETE=${count}-${KEEP};
+					echo "- Remove old backups for '${name}', found ${count}, will delete ${TO_DELETE}";
 					if [ ${TEST} -eq 0 ];
 					then
-						ls ${BACKUPDIR}/${name}${DB_TYPE}*.sql|head -n ${KEEP}|xargs rm;
+						ls ${BACKUPDIR}/${name}${DB_TYPE}*.sql|head -n ${TO_DELETE}|xargs rm;
 					else
-						echo "ls ${BACKUPDIR}/${name}${DB_TYPE}*.sql|head -n ${KEEP}|xargs rm";
+						echo "ls ${BACKUPDIR}/${name}${DB_TYPE}*.sql|head -n ${TO_DELETE}|xargs rm";
 					fi;
 				fi;
 			fi;
@@ -576,7 +580,11 @@ do
 			echo "${PG_DUMP} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -c --format=c ${db} > ${filename}";
 		fi;
 		# get the file size for the dumped file and convert it to a human readable format
-		filesize=$(wc -c "${filename}" | cut -f 1 -d ' ');
+		filesize=0;
+		if [ -f "${filename}" ];
+		then
+			filesize=$(wc -c "${filename}" | cut -f 1 -d ' ');
+		fi;
 		DURATION=$[ $(date "+%s")-${SUBSTART} ];
 		echo "done ($(convert_time ${DURATION}) and $(convert_bytes ${filesize}))."
 	else
