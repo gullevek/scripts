@@ -7,7 +7,7 @@
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} -o <DB OWNER> -d <DB NAME> -f <FILE NAME> [-h <DB HOST>] [-p <DB PORT>] [-e <ENCODING>] [-i <POSTGRES VERSION>] [-j <JOBS>] [-r|-a] [-t]
+	Usage: ${0##/*/} -o <DB OWNER> -d <DB NAME> -f <FILE NAME> [-h <DB HOST>] [-p <DB PORT>] [-e <ENCODING>] [-i <POSTGRES VERSION>] [-j <JOBS>] [-r|-a] [-n]
 
 	-o <DB OWNER>: The user who will be owner of the database to be restored
 	-d <DB NAME>: The database to restore the file to
@@ -19,7 +19,7 @@ function usage ()
 	-j <JOBS>: Run how many jobs Parallel. If not set, 2 jobs are run parallel
 	-r: use redhat base paths instead of debian
 	-a: use amazon base paths instead of debian
-	-t: test, do not do anything, just test flow
+	-n: dry run, do not do anything, just test flow
 	EOT
 }
 
@@ -30,12 +30,12 @@ NO_ASK=0;
 TEMPLATEDB='template0';
 REDHAT=0;
 AMAZON=0;
-TEST=0;
+DRY_RUN=0;
 BC='/usr/bin/bc';
 PORT_REGEX="^[0-9]{4,5}$";
 MAX_JOBS='';
 # if we have options, set them and then ignore anything below
-while getopts ":o:d:h:f:p:e:i:j:raqt" opt
+while getopts ":o:d:h:f:p:e:i:j:raqn" opt
 do
     case $opt in
         o|owner)
@@ -62,7 +62,6 @@ do
 				file=$OPTARG;
             fi;
             ;;
-
         h|hostname)
             if [ -z "$host" ];
             then
@@ -95,8 +94,8 @@ do
 		a|amazon)
 			AMAZON=1;
 			;;
-		t|test)
-			TEST=1;
+		n|dry-run)
+			DRY_RUN=1;
 			;;
         h|help)
             usage;
@@ -151,6 +150,12 @@ then
 	BC_OK=1;
 else
 	BC_OK=0;
+fi;
+
+if [ ! -f "${file}" ];
+then
+	echo "File name needs to be provided or file could not be found";
+	exit 1;
 fi;
 
 # METHOD: convert_time
@@ -354,7 +359,7 @@ else
 	START=`date +'%s'`;
 	echo "Drop DB $database [$_host:$_port] @ $start_time";
 	# DROP DATABASE
-	if [ $TEST -eq 0 ];
+	if [ $DRY_RUN -eq 0 ];
 	then
 		$PG_DROPDB -U postgres $host $port $database;
 	else
@@ -362,7 +367,7 @@ else
 	fi;
 	# CREATE DATABASE
 	echo "Create DB $database with $owner and encoding $encoding [$_host:$_port] @ `date +"%F %T"`";
-	if [ $TEST -eq 0 ];
+	if [ $DRY_RUN -eq 0 ];
 	then
 		$PG_CREATEDB -U postgres -O $owner -E $encoding -T $TEMPLATEDB $host $port $database;
 	else
@@ -370,7 +375,7 @@ else
 	fi;
 	# CREATE plpgsql LANG
 	echo "Create plpgsql lang in DB $database [$_host:$_port] @ `date +"%F %T"`";
-	if [ $TEST -eq 0 ];
+	if [ $DRY_RUN -eq 0 ];
 	then
 		$PG_CREATELANG -U postgres plpgsql $host $port $database;
 	else
@@ -378,7 +383,7 @@ else
 	fi;
 	# RESTORE DATA
 	echo "Restore data from $file to DB $database and $MAX_JOBS [$_host:$_port] @ `date +"%F %T"`";
-	if [ $TEST -eq 0 ];
+	if [ $DRY_RUN -eq 0 ];
 	then
 		$PG_RESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>restore_errors.$LOG_FILE_EXT;
 	else
@@ -386,7 +391,7 @@ else
 	fi;
 	echo "Resetting all sequences from DB $database [$_host:$_post] @ `date +"%F %T"`";
 	# SEQUENCE RESET DATA COLLECTION
-	if [ $TEST -eq 0 ];
+	if [ $DRY_RUN -eq 0 ];
 	then
 		echo "SELECT 'SELECT SETVAL(' ||quote_literal(S.relname)|| ', MAX(' ||quote_ident(C.attname)|| ') ) FROM ' ||quote_ident(T.relname)|| ';' FROM pg_class AS S, pg_depend AS D, pg_class AS T, pg_attribute AS C WHERE S.relkind = 'S' AND S.oid = D.objid AND D.refobjid = T.oid AND D.refobjid = C.attrelid AND D.refobjsubid = C.attnum ORDER BY S.relname;" | $PG_PSQL -U $owner -Atq $host $post -o $TEMP_FILE $database
 		$PG_PSQL -U $owner $host $port -e -f $TEMP_FILE $database 1>output_sequence.$LOG_FILE_EXT 2>errors_sequence.$database.$LOG_FILE_EXT;

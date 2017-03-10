@@ -2,6 +2,7 @@
 
 BK_PATH='/backup/db_dumps_mysql/';
 MYSQL_DUMP_BIN='/usr/bin/mysqldump';
+# auto set?
 DB_TYPE='mysql-5.5';
 CONFIG='/root/.my.cnf';
 KEEP=2; # KEEP how many days
