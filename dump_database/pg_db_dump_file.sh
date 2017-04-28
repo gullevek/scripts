@@ -63,8 +63,12 @@ AMAZON=0;
 CONN_DB_HOST='';
 
 # set options
-while getopts ":ctsgnk:b:i:d:e:u:h:p:l:ra" opt
+while getopts ":ctsgnk:b:i:d:e:u:h:p:l:ram" opt
 do
+	# TODO:
+	# warn empty OPTARG + error
+	# for ALL opt that need OPTARG
+
 	case ${opt} in
 		t|test)
 			TEST=1;
@@ -141,7 +145,7 @@ do
 		a|amazon)
 			AMAZON=1;
 			;;
-		h|help)
+		m|manual)
             usage;
             exit 0;
             ;;
@@ -494,7 +498,7 @@ then
 fi;
 START=$(date "+%s");
 echo Starting at $(date "+%Y-%m-%d %H:%M:%S")
-echo "Target dump directory is ${BACKUPDIR}";
+echo "Target dump directory is: ${BACKUPDIR}";
 echo "Keep ${KEEP} backups";
 # if flag is set, do pre run clean up
 if [ ${PRE_RUN_CLEAN_UP} -eq 1 ];
@@ -508,7 +512,7 @@ search_names=();
 # dump globals
 if [ ${GLOBALS} -eq 1 ];
 then
-	echo -e -n "+ Dumping globals...\t\t"
+	echo -e -n "+ Dumping globals ... "
 	# reset any previous set db name from deletes so the correct global file name is set
 	db='';
 	filename=$(get_dump_file_name);
@@ -519,9 +523,9 @@ then
 	else
 		echo "${PG_DUMPALL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} --globals-only > ${filename}";
 	fi;
-	echo "done."
+	echo "done";
 else
-	echo "- Skip dumping globals.";
+	echo "- Skip dumping globals";
 fi;
 
 echo -n "(+) Dump databases: ";
@@ -569,7 +573,7 @@ do
 	fi;
 	if [ ${exclude} -eq 0 ] && [ ${include} -eq 1 ];
 	then
-		echo -n -e "+ Dumping database '${db}' ...\t\t"
+		printf "+ Dumping database: %35s ... " "${db}";
 		filename=$(get_dump_file_name);
 		search_names+=("${db}.*");
 		SUBSTART=$(date "+%s");
@@ -586,9 +590,9 @@ do
 			filesize=$(wc -c "${filename}" | cut -f 1 -d ' ');
 		fi;
 		DURATION=$[ $(date "+%s")-${SUBSTART} ];
-		echo "done ($(convert_time ${DURATION}) and $(convert_bytes ${filesize}))."
+		printf "done (%s and %s)\n" "$(convert_time ${DURATION})" "$(convert_bytes ${filesize})";
 	else
-		echo "- Exclude dumping database '${db}'";
+		printf -- "- Exclude database: %35s\n" "${db}";
 	fi;
 done
 echo Ended at $(date "+%Y-%m-%d %H:%M:%S")
