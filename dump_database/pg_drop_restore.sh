@@ -33,6 +33,7 @@ AMAZON=0;
 DRY_RUN=0;
 BC='/usr/bin/bc';
 PORT_REGEX="^[0-9]{4,5}$";
+OPTARG_REGEX="^-";
 MAX_JOBS='';
 # if we have options, set them and then ignore anything below
 while getopts ":o:d:h:f:p:e:i:j:raqnm" opt

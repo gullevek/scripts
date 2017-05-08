@@ -29,6 +29,7 @@ DUMP_FOLDER='';
 MAX_JOBS='';
 BC='/usr/bin/bc';
 PORT_REGEX="^[0-9]{4,5}$";
+OPTARG_REGEX="^-";
 DRY_RUN=0;
 # options check
 while getopts ":f:j:h:p:e:granm" opt
