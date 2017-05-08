@@ -35,8 +35,52 @@ BC='/usr/bin/bc';
 PORT_REGEX="^[0-9]{4,5}$";
 MAX_JOBS='';
 # if we have options, set them and then ignore anything below
-while getopts ":o:d:h:f:p:e:i:j:raqn" opt
+while getopts ":o:d:h:f:p:e:i:j:raqnm" opt
 do
+	# pre test for unfilled
+    if [ "${opt}" = ":" ] || [[ "${OPTARG-}" =~ ${OPTARG_REGEX} ]];
+    then
+        if [ "${opt}" = ":" ];
+        then
+            CHECK_OPT=${OPTARG};
+        else
+            CHECK_OPT=${opt};
+        fi;
+        case ${CHECK_OPT} in
+            o)
+                echo "-o needs an owner name";
+                ERROR=1;
+                ;;
+            d)
+                echo "-d needs a database name";
+                ERROR=1;
+                ;;
+            h)
+                echo "-h needs a host name";
+                ERROR=1;
+                ;;
+            f)
+                echo "-f needs a file name";
+                ERROR=1;
+                ;;
+            p)
+                echo "-h needs a port number";
+                ERROR=1;
+                ;;
+            e)
+                echo "-e needs an encoding";
+                ERROR=1;
+                ;;
+            i)
+                echo "-i needs a postgresql version";
+                ERROR=1;
+                ;;
+            j)
+                echo "-j needs a numeric value for parallel jobs";
+                ERROR=1;
+                ;;
+        esac
+    fi;
     case $opt in
         o|owner)
             if [ -z "$owner" ];
@@ -97,7 +141,7 @@ do
 		n|dry-run)
 			DRY_RUN=1;
 			;;
-        h|help)
+        m|help)
             usage;
             exit 0;
             ;;

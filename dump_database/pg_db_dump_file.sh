@@ -49,6 +49,7 @@ BC='/usr/bin/bc';
 PRE_RUN_CLEAN_UP=0;
 SET_IDENT=0;
 PORT_REGEX="^[0-9]{4,5}$";
+OPTARG_REGEX="^-";
 # defaults
 _BACKUPDIR='/mnt/backup/db_dumps_fc/';
 _DB_VERSION=$(pg_dump --version | grep "pg_dump" | cut -d " " -f 3 | cut -d "." -f 1,2);
@@ -61,14 +62,60 @@ _INCLUDE=''; # space seperated list of database names
 REDHAT=0;
 AMAZON=0;
 CONN_DB_HOST='';
+ERROR=0;
 
 # set options
 while getopts ":ctsgnk:b:i:d:e:u:h:p:l:ram" opt
 do
-	# TODO:
-	# warn empty OPTARG + error
-	# for ALL opt that need OPTARG
-
+	# pre test for unfilled
+	if [ "${opt}" = ":" ] || [[ "${OPTARG-}" =~ ${OPTARG_REGEX} ]];
+	then
+		if [ "${opt}" = ":" ];
+		then
+			CHECK_OPT=${OPTARG};
+		else
+			CHECK_OPT=${opt};
+		fi;
+		case ${CHECK_OPT} in
+			k)
+				echo "-k needs a number";
+				ERROR=1;
+				;;
+			b)
+				echo "-b needs a path";
+				ERROR=1;
+				;;
+			i)
+				echo "-i needs an ident";
+				ERROR=1;
+				;;
+			u)
+				echo "-u needs a user name";
+				ERROR=1;
+				;;
+			h)
+				echo "-h needs a host name";
+				ERROR=1;
+				;;
+			p)
+				echo "-p needs a port";
+				ERROR=1;
+				;;
+			l)
+				echo "-l needs a login password";
+				ERROR=1;
+				;;
+			d)
+				echo "-d needs a database name";
+				ERROR=1;
+				;;
+			e)
+				echo "-e needs a database name";
+				ERROR=1;
+				;;
+		esac
+	fi;
+	# set options
 	case ${opt} in
 		t|test)
 			TEST=1;
@@ -157,9 +204,15 @@ do
 	esac;
 done;
 
+if [ ${ERROR} -eq 1 ];
+then
+	exit 0;
+fi;
+
 if [ "${REDHAT}" -eq 1 ] && [ "${AMAZON}" -eq 1 ];
 then
 	echo "You cannot set the -a and -r flag at the same time";
+	exit 0;
 fi;
 
 # set the defaults
@@ -240,6 +293,11 @@ then
 	exit 0;
 else
 	rm -f ${BACKUPDIR}/tmpfile;
+fi;
+# if backupdir is "." rewrite to pwd
+if [ "${BACKUPDIR}" == '.' ];
+then
+	BACKUPDIR=$(pwd);
 fi;
 # check if we can connect to template1 table, if not we abort here
 connect=$(${PG_PSQL} -U "${DB_USER}" ${CONN_DB_HOST} -p ${DB_PORT} -d template1 -t -A -F "," -X -q -c "SELECT datname FROM pg_catalog.pg_database WHERE datname = 'template1';") || echo "[!] pgsql connect error";
@@ -497,7 +555,7 @@ then
 	export PGPASSWORD=${DB_PASSWD};
 fi;
 START=$(date "+%s");
-echo Starting at $(date "+%Y-%m-%d %H:%M:%S")
+printf "Starting at %s\n" "$(date '+%Y-%m-%d %H:%M:%S')";
 echo "Target dump directory is: ${BACKUPDIR}";
 echo "Keep ${KEEP} backups";
 # if flag is set, do pre run clean up
@@ -543,7 +601,8 @@ else
 	echo ${EXCLUDE};
 fi;
 
-for owner_db in $(${PG_PSQL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -d template1 -t -A -F "," -X -q -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname, pg_catalog.pg_encoding_to_char(encoding) AS encoding FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)';")
+filesize_sum=0;
+for owner_db in $(${PG_PSQL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -d template1 -t -A -F "," -X -q -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname, pg_catalog.pg_encoding_to_char(encoding) AS encoding FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)' ORDER BY datname;")
 do
 	# get the user who owns the DB too
 	owner=$(echo ${owner_db} | cut -d "," -f 1);
@@ -588,6 +647,7 @@ do
 		if [ -f "${filename}" ];
 		then
 			filesize=$(wc -c "${filename}" | cut -f 1 -d ' ');
+			filesize_sum=$[ $filesize+$filesize_sum ];
 		fi;
 		DURATION=$[ $(date "+%s")-${SUBSTART} ];
 		printf "done (%s and %s)\n" "$(convert_time ${DURATION})" "$(convert_bytes ${filesize})";
@@ -595,7 +655,7 @@ do
 		printf -- "- Exclude database: %35s\n" "${db}";
 	fi;
 done
-echo Ended at $(date "+%Y-%m-%d %H:%M:%S")
+printf "Backup ended at %s\n" "$(date '+%Y-%m-%d %H:%M:%S')";
 if [ ! -z "${DB_PASSWD}" ];
 then
 	unset DB_PASSWD;
@@ -607,7 +667,7 @@ then
 fi;
 
 DURATION=$[ $(date "+%s")-${START} ];
-echo Ended at $(date "+%Y-%m-%d %H:%M:%S")
-echo "finished script in $(convert_time ${DURATION})";
+printf "Cleanup ended at %s\n" "$(date '+%Y-%m-%d %H:%M:%S')";
+printf "Finished backup in %s with %s\n" "$(convert_time ${DURATION})" "$(convert_bytes ${filesize_sum})";
 
 ## END
