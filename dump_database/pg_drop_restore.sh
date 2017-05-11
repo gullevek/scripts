@@ -434,11 +434,21 @@ else
 	else
 		echo $PG_RESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>restore_errors.$LOG_FILE_EXT;
 	fi;
-	echo "Resetting all sequences from DB $database [$_host:$_post] @ `date +"%F %T"`";
+	# BUG FIX FOR POSTGRESQL 9.6.2 db_dump
+	# it does not dump the default public ACL so the owner of the DB cannot access the data, check if the ACL dump is missing and do a basic restore
+	if [ -z $($PG_RESTORE -l $file | grep -- "ACL - public postgres") ];
+	then
+		echo "Fixing missing basic public schema ACLs from DB $database [$_host:$_port] @ `date +"%F %T"`";
+		# grant usage on schema public to public;
+		# grant create on schema public to public;
+		echo "GRANT USAGE ON SCHEMA public TO public;" | $PG_PSQL -U postgres -Atq $host $port $database;
+		echo "GRANT CREATE ON SCHEMA public TO public;" | $PG_PSQL -U postgres -Atq $host $port $database;
+	fi;
 	# SEQUENCE RESET DATA COLLECTION
+	echo "Resetting all sequences from DB $database [$_host:$_port] @ `date +"%F %T"`";
 	if [ $DRY_RUN -eq 0 ];
 	then
-		echo "SELECT 'SELECT SETVAL(' ||quote_literal(S.relname)|| ', MAX(' ||quote_ident(C.attname)|| ') ) FROM ' ||quote_ident(T.relname)|| ';' FROM pg_class AS S, pg_depend AS D, pg_class AS T, pg_attribute AS C WHERE S.relkind = 'S' AND S.oid = D.objid AND D.refobjid = T.oid AND D.refobjid = C.attrelid AND D.refobjsubid = C.attnum ORDER BY S.relname;" | $PG_PSQL -U $owner -Atq $host $post -o $TEMP_FILE $database
+		echo "SELECT 'SELECT SETVAL(' ||quote_literal(S.relname)|| ', MAX(' ||quote_ident(C.attname)|| ') ) FROM ' ||quote_ident(T.relname)|| ';' FROM pg_class AS S, pg_depend AS D, pg_class AS T, pg_attribute AS C WHERE S.relkind = 'S' AND S.oid = D.objid AND D.refobjid = T.oid AND D.refobjid = C.attrelid AND D.refobjsubid = C.attnum ORDER BY S.relname;" | $PG_PSQL -U $owner -Atq $host $port -o $TEMP_FILE $database
 		$PG_PSQL -U $owner $host $port -e -f $TEMP_FILE $database 1>output_sequence.$LOG_FILE_EXT 2>errors_sequence.$database.$LOG_FILE_EXT;
 		rm $TEMP_FILE;
 	else

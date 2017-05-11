@@ -447,6 +447,16 @@ do
 		else
 			echo "$DBPATH$PGRESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>$LOGS'/errors.'$database'.'$(date +"%Y%m%d_%H%M%S".log)";
 		fi;
+		# BUG FIX FOR POSTGRESQL 9.6.2 db_dump
+		# it does not dump the default public ACL so the owner of the DB cannot access the data, check if the ACL dump is missing and do a basic restore
+		if [ -z $($DBPATH$PGRESTORE -l $file | grep -- "ACL - public postgres") ];
+		then
+			echo "? Fixing missing basic public schema ACLs from DB $database [$_host:$_port] @ `date +"%F %T"`";
+			# grant usage on schema public to public;
+			# grant create on schema public to public;
+			echo "GRANT USAGE ON SCHEMA public TO public;" | $DBPATH$PSQL -U postgres -Atq $host $port $database;
+			echo "GRANT CREATE ON SCHEMA public TO public;" | $DBPATH$PSQL -U postgres -Atq $host $port $database;
+		fi;
 		echo "$ Restore of data '$filename' for DB '$database' [$_host:$_port] finished" | $LOGFILE;
 		DURATION=$[ `date +'%s'`-$START ];
 		echo "* Start at $start_time and end at `date +"%F %T"` and ran for $(convert_time ${DURATION}) seconds" | $LOGFILE;

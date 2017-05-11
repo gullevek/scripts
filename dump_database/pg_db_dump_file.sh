@@ -98,7 +98,7 @@ do
 				ERROR=1;
 				;;
 			p)
-				echo "-p needs a port";
+				echo "-p needs a port number";
 				ERROR=1;
 				;;
 			l)
@@ -196,6 +196,9 @@ do
             usage;
             exit 0;
             ;;
+        :)
+			echo "Option -$OPTARG requires an argument."
+			;;
         \?)
             echo -e "\n Option does not exist: ${OPTARG}\n";
             usage;
