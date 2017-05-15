@@ -1,0 +1,18 @@
+# Attic backup wrapper scripts settings
+
+# target users, etc
+TARGET_USER="";
+TARGET_HOST="";
+TARGET_FOLDER="";
+# the backup file for this host
+BACKUP_FILE="some-prefix-"`hostname`".borg";
+# compression settings (empty for none, lz4, zlib, lzma)
+# level, if empty then default, else number between 0 and 9
+COMPRESSION="zlib"
+COMPRESSION_LEVEL=""
+# todays date
+DATE=`date +%Y-%m-%d`;
+# post run cleanup times
+KEEP_DAYS=7;
+KEEP_WEEKS=4;
+KEEP_MONTHS=6;
