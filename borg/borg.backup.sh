@@ -318,8 +318,8 @@ fi;
 echo "Prune repository with keep daily: ${KEEP_DAYS}, weekly: ${KEEP_WEEKS}, monthly: ${KEEP_MONTHS}";
 if [ ${DEBUG} -eq 1 ];
 then
-	echo "borg prune -v -s ${PRUNE_DEBUG} ${REPOSITORY} --keep-daily=${KEEP_DAYS} --keep-weekly=${KEEP_WEEKS} --keep-monthly=${KEEP_MONTHS}";
+	echo "borg prune -v -s --list ${PRUNE_DEBUG} ${REPOSITORY} --keep-daily=${KEEP_DAYS} --keep-weekly=${KEEP_WEEKS} --keep-monthly=${KEEP_MONTHS}";
 fi;
-borg prune -v -s ${PRUNE_DEBUG} ${REPOSITORY} --keep-daily=${KEEP_DAYS} --keep-weekly=${KEEP_WEEKS} --keep-monthly=${KEEP_MONTHS} 2>&1 || echo "[!] Attic prune aborted";
+borg prune -v -s --list ${PRUNE_DEBUG} ${REPOSITORY} --keep-daily=${KEEP_DAYS} --keep-weekly=${KEEP_WEEKS} --keep-monthly=${KEEP_MONTHS} 2>&1 || echo "[!] Attic prune aborted";
 
 ## END
