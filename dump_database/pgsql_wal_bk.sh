@@ -12,6 +12,7 @@ function usage ()
 
 	-s <%p>     : from postgresql [full path + wal file name]
 	-t <%f>     : from postgresql [wal file name only]
+	-r          : use redhat folders, default are debian folders
 	-m <folder> : can be used to move the data after the copy to a another folder (eg network folder)
 	-i <version>: optional postgresql version, eg 9.4, if not given default is currently 9.4
 	-c          : if set, data will be compressed after it is copied
@@ -23,10 +24,12 @@ function usage ()
 				  -------+--------+------+--------+------------
 				  lzop   | fast   | low  | low    | low
 				  gzip   | medium | low  | low    | medium
+				  pigz   | medium | low  | low    | high
 				  bzip2  | low    | high | medium | high
 				  lbzip2 | medium | high | high   | high
 				  lzma   | low    | high | high   | high
 				  xz     | low    | high | high   | high
+				  pxz    | medium | high | high   | high
 
 				  Recommended: lzop
 	EOT
@@ -49,9 +52,11 @@ compress_software='';
 # the default compression software
 default_compress_software='lzop';
 # valid list of compression software
-valid_compress_software=(gzip bzip2 lbzip2 xz lzma lzop);
+valid_compress_software=(gzip pigz bzip2 lbzip2 xz pxz lzma lzop);
 # postgresql version override
 ident='';
+# base folder
+BASE_FOLDER='postgres';
 # general error check var
 error=0;
 
@@ -69,6 +74,9 @@ do
 			then
 				target_f=${OPTARG};
 			fi;
+			;;
+		r|redhat)
+			BASE_FOLDER='pgsql';
 			;;
 		m|move)
 			if [ -z "${move}" ];
@@ -190,7 +198,7 @@ then
 	# check if that folder actually exists
 	# do auto detect else
 	# only works with debian style paths
-	if [ -d "/var/lib/postgresql/${ident}/" ];
+	if [ -d "/var/lib/${BASE_FOLDER}/${ident}/" ];
 	then
 		VERSION="${ident}";
 	fi;
@@ -210,7 +218,7 @@ then
 fi;
 
 # Modify this according to your setup
-PGSQL="/var/lib/postgresql/${VERSION}/";
+PGSQL="/var/lib/${BASE_FOLDER}/${VERSION}/";
 # folder needs to be owned or 100% writable by the postgres user
 DEST="/var/local/backup/postgres/${VERSION}/wal/";
 # create folder if it does not exist
