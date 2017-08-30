@@ -117,8 +117,6 @@ my $result = GetOptions(\%opt,
 	'help|h|?' # just help
 ) || exit 1;
 
-pod2usage(-exitval => 0, -verbose => 2) if ($opt{'man'});
-
 if ($opt{'help'})
 {
 	print "Compare files script:\n";
