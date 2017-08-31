@@ -21,7 +21,7 @@ BEGIN
 }
 
 # converts bytes to human readable format
-sub convert_number
+sub byte_format
 {
 	my ($number) = @_;
 	my $pos; # the original position in the labels array
@@ -207,6 +207,8 @@ my $base_folder;
 my $base_file;
 my $base_ext;
 my $output_file;
+my $sep_line_length = 70;
+my $sep_line = sprintf("-" x $sep_line_length);
 # compare hash: pos -> entry = 1
 my %compare_data = ();
 # for all files same csv type
@@ -218,7 +220,7 @@ my $csv = Text::CSV_XS->new ({
 my $start_time = time();
 my $end_time;
 
-print "---------------------------------\n";
+print $sep_line."\n";
 # open compare file and read in data into array
 $COMPARE = new IO::File;
 open($COMPARE, "<:encoding($encoding)", $compare_file) || die("Unable to open compare file ".$compare_file.": ".$!."\n");
@@ -227,7 +229,7 @@ print "Reading COMPARE [$compare_file: ";
 $COMPARE->seek(0, 2);
 $filesize = $COMPARE->tell;
 $COMPARE->seek(0, 0);
-print convert_number($filesize)."] ";
+print byte_format($filesize)."] ";
 # TODO: flag if files have header
 while (<$COMPARE>)
 {
@@ -288,8 +290,8 @@ open($INPUT, "<:encoding($encoding)", $input_file) || die("Unable to open input 
 $INPUT->seek(0, 2);
 $filesize = $INPUT->tell;
 $INPUT->seek(0, 0);
-print convert_number($filesize)."] [DONE]\n";
-print "---------------------------------\n";
+print byte_format($filesize)."] [DONE]\n";
+print $sep_line."\n";
 print "Comparing data: ";
 # compare data
 while (<$INPUT>)
@@ -356,11 +358,11 @@ close($OUTPUT);
 close($INPUT);
 $end_time = time();
 
-print "---------------------------------\n";
+print $sep_line."\n";
 print "Finished compare\n";
 print "Input file : ".format_number($input_file_rows)."\n";
 print "Output file: ".format_number($output_file_rows)."\n";
 print "Start: ".create_time($start_time).", End: ".create_time($end_time).", Running Time: ".convert_time($end_time - $start_time)."\n";
-print "---------------------------------\n";
+print $sep_line."\n";
 
 __END__
