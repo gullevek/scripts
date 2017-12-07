@@ -12,12 +12,12 @@ use utf8;
 BEGIN
 {
 	use POSIX qw(floor);
-    use Text::CSV_XS;
-    use Getopt::Long;
-    use Time::HiRes qw(time);
-    use File::Basename;
-    use Number::Format qw(:subs);
-    unshift(@INC, File::Basename::dirname($0).'/');
+	use Text::CSV_XS;
+	use Getopt::Long;
+	use Time::HiRes qw(time);
+	use File::Basename;
+	use Number::Format qw(:subs);
+	unshift(@INC, File::Basename::dirname($0).'/');
 }
 
 # converts bytes to human readable format
@@ -104,6 +104,7 @@ my $input_file = ''; # master file from which we take the data that we need to c
 my $compare_file = ''; # file that holds the data we use as a compare base
 my $output_folder = ''; # target folder where to write the output
 my @compare_fields = (); # single or groupings of compare data format 1,1
+my @compare_flags_txt = (); # output for info only
 
 # add prompt bundeling (eg -qqq
 Getopt::Long::Configure ("bundling");
@@ -183,7 +184,21 @@ else
 				print "Compare block $compare number two not valid: $2. Needs to be interger 1 or higher.\n";
 				$error = 1;
 			}
-
+		}
+		if ($compare =~ /^(\d{1,})([\-,]{1})(\d{1,})?/)
+		{
+			my $input_pos = $1;
+			my $compare_pos = defined($3) ? $3 : (defined($1) ? $1 : 0);
+			my $compare_flag = $2;
+			if ($compare_flag eq ',')
+			{
+				$compare_flag = 'matches';
+			}
+			elsif ($compare_flag eq '-')
+			{
+				$compare_flag = 'does not match';
+			}
+			push(@compare_flags_txt, 'input pos '.$input_pos.' '.$compare_flag.' compare pos '.$compare_pos);
 		}
 	}
 }
@@ -221,6 +236,7 @@ my $start_time = time();
 my $end_time;
 
 print $sep_line."\n";
+print "Compare FLAGS: ".join('; ', @compare_flags_txt)."\n";
 # open compare file and read in data into array
 $COMPARE = new IO::File;
 open($COMPARE, "<:encoding($encoding)", $compare_file) || die("Unable to open compare file ".$compare_file.": ".$!."\n");
@@ -278,7 +294,7 @@ else
 # open output file for writing
 # set output file based on input file (remove folder, split with extension add ".clean" into it
 ($base_file, $base_folder, $base_ext) = fileparse($input_file, qr/\.[^.]*/);
-$output_file = $output_folder.$base_file.'.clean'.$base_ext;
+$output_file = $output_folder.'/'.$base_file.'.clean'.$base_ext;
 print "Open OUTPUT [$output_file] ";
 $OUTPUT = new IO::File;
 open($OUTPUT, ">:encoding($encoding)", $output_file) || die("Unable to open output file ".$output_file.": ".$!."\n");
