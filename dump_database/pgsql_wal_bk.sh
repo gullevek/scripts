@@ -1,6 +1,14 @@
 #!/bin/bash
 
-set -e -u -o pipefail
+set -u
+
+containsElement ()
+{
+	local e match="$1"
+	shift
+	for e; do [[ "$e" == "$match" ]] && return 0; done
+	return 1
+}
 
 function usage ()
 {
@@ -51,8 +59,13 @@ compress=0;
 compress_software='';
 # the default compression software
 default_compress_software='lzop';
+# default compress level for bzip2/xz/lzma
+# all the others work fine standard set
+default_compress_level='-2';
 # valid list of compression software
 valid_compress_software=(gzip pigz bzip2 lbzip2 xz pxz lzma lzop);
+# list of compression software where we add the compression level
+compress_level_software=(bzip2 lbzip2 xz pxz lzma);
 # postgresql version override
 ident='';
 # base folder
@@ -151,6 +164,7 @@ if [ "${compress}" -eq 1 ];
 then
 	vcs_valid=0;
 	vcs_exists=0;
+	vcs_compress_flag=0;
 	for vcs in ${valid_compress_software[@]};
 	do
 		if [ "${compress_software}" = "${vcs}" ];
@@ -162,12 +176,20 @@ then
 			do
 				if [ -f "${path}/${vcs}" ];
 				then
+					vcs_compress_flag=1;
 					vcs_exists=1;
 					compress_cmd="${path}/${vcs}";
 					# lzop needs -U for removal of old file after compression
 					if [ "${compress_software}" = 'lzop' ];
 					then
 						compress_cmd=${compress_cmd}' -U';
+					fi;
+					# check if in the list for compress levels, if yes, add
+					containsElement "${vcs}" "${compress_level_software[@]}";
+					vcs_compress_flag=$?;
+					if [ "${vcs_compress_flag}" -eq 0 ];
+					then
+						compress_cmd=${compress_cmd}' '${default_compress_level};
 					fi;
 				fi;
 			done;
@@ -203,17 +225,17 @@ then
 		VERSION="${ident}";
 	fi;
 fi;
-# if no version set yet, try auto detect, else set to 9.4 hard
+# if no version set yet, try auto detect, else set to 9.6 hard
 if [ -z "${VERSION}" ];
 then
 	# try to run psql from default path and get the version number
-	ident=`pg_dump --version | grep "pg_dump" | cut -d " " -f 3 | cut -d "." -f 1,2`;
+	ident=$(pgv=$(pg_dump --version| grep "pg_dump" | cut -d " " -f 3); if [[ $(echo "${pgv}" | cut -d "." -f 1) -ge 10 ]]; then echo "${pgv}" | cut -d "." -f 1; else echo "${pgv}" | cut -d "." -f 1,2; fi);
 	if [ ! -z "${ident}" ];
 	then
 		VERSION="${ident}";
 	else
 		# hard set
-		VERSION="9.4";
+		VERSION="9.6";
 	fi;
 fi;
 

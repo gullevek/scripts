@@ -39,97 +39,97 @@ MAX_JOBS='';
 while getopts ":o:d:h:f:p:e:i:j:raqnm" opt
 do
 	# pre test for unfilled
-    if [ "${opt}" = ":" ] || [[ "${OPTARG-}" =~ ${OPTARG_REGEX} ]];
-    then
-        if [ "${opt}" = ":" ];
-        then
-            CHECK_OPT=${OPTARG};
-        else
-            CHECK_OPT=${opt};
-        fi;
-        case ${CHECK_OPT} in
-            o)
-                echo "-o needs an owner name";
-                ERROR=1;
-                ;;
-            d)
-                echo "-d needs a database name";
-                ERROR=1;
-                ;;
-            h)
-                echo "-h needs a host name";
-                ERROR=1;
-                ;;
-            f)
-                echo "-f needs a file name";
-                ERROR=1;
-                ;;
-            p)
-                echo "-h needs a port number";
-                ERROR=1;
-                ;;
-            e)
-                echo "-e needs an encoding";
-                ERROR=1;
-                ;;
-            i)
-                echo "-i needs a postgresql version";
-                ERROR=1;
-                ;;
-            j)
-                echo "-j needs a numeric value for parallel jobs";
-                ERROR=1;
-                ;;
-        esac
-    fi;
-    case $opt in
-        o|owner)
-            if [ -z "$owner" ];
-            then
-                owner=$OPTARG;
-            fi;
-            ;;
-        d|database)
-            if [ -z "$database" ];
-            then
-                database=$OPTARG;
-            fi;
-            ;;
+	if [ "${opt}" = ":" ] || [[ "${OPTARG-}" =~ ${OPTARG_REGEX} ]];
+	then
+		if [ "${opt}" = ":" ];
+		then
+			CHECK_OPT=${OPTARG};
+		else
+			CHECK_OPT=${opt};
+		fi;
+		case ${CHECK_OPT} in
+			o)
+				echo "-o needs an owner name";
+				ERROR=1;
+				;;
+			d)
+				echo "-d needs a database name";
+				ERROR=1;
+				;;
+			h)
+				echo "-h needs a host name";
+				ERROR=1;
+				;;
+			f)
+				echo "-f needs a file name";
+				ERROR=1;
+				;;
+			p)
+				echo "-h needs a port number";
+				ERROR=1;
+				;;
+			e)
+				echo "-e needs an encoding";
+				ERROR=1;
+				;;
+			i)
+				echo "-i needs a postgresql version";
+				ERROR=1;
+				;;
+			j)
+				echo "-j needs a numeric value for parallel jobs";
+				ERROR=1;
+				;;
+		esac
+	fi;
+	case $opt in
+		o|owner)
+			if [ -z "$owner" ];
+			then
+				owner=$OPTARG;
+			fi;
+			;;
+		d|database)
+			if [ -z "$database" ];
+			then
+				database=$OPTARG;
+			fi;
+			;;
 		e|encoding)
 			if [ -z "$encoding" ];
 			then
 				encoding=$OPTARG;
 			fi;
 			;;
-        f|file)
-            if [ -z "$file" ];
-            then
+		f|file)
+			if [ -z "$file" ];
+			then
 				file=$OPTARG;
-            fi;
-            ;;
-        h|hostname)
-            if [ -z "$host" ];
-            then
+			fi;
+			;;
+		h|hostname)
+			if [ -z "$host" ];
+			then
 				host='-h '$OPTARG;
 				_host=$OPTARG;
-            fi;
-            ;;
-        p|port)
-            if [ -z "$port" ];
-            then
+			fi;
+			;;
+		p|port)
+			if [ -z "$port" ];
+			then
 				port='-p '$OPTARG;
 				_port=$OPTARG;
-            fi;
-            ;;
-        i|ident)
-            if [ -z "$ident" ];
-            then
-                ident=$OPTARG;
-            fi;
-            ;;
-        j|jobs)
+			fi;
+			;;
+		i|ident)
+			if [ -z "$ident" ];
+			then
+				ident=$OPTARG;
+			fi;
+			;;
+		j|jobs)
 			MAX_JOBS=${OPTARG};
-            ;;
+			;;
 		q|quiet)
 			NO_ASK=1;
 			;;
@@ -142,16 +142,16 @@ do
 		n|dry-run)
 			DRY_RUN=1;
 			;;
-        m|help)
-            usage;
-            exit 0;
-            ;;
-        \?)
-            echo -e "\n Option does not exist: $OPTARG\n";
-            usage;
-            exit 1;
-        ;;
-    esac;
+		m|help)
+			usage;
+			exit 0;
+			;;
+		\?)
+			echo -e "\n Option does not exist: $OPTARG\n";
+			usage;
+			exit 1;
+		;;
+	esac;
 done;
 
 if [ "$REDHAT" -eq 1 ] && [ "$AMAZON" -eq 1 ];
@@ -348,14 +348,14 @@ fi;
 if [ -z "$ident" ];
 then
 	# try to run psql from default path and get the version number
-	ident=`pg_dump --version | grep "pg_dump" | cut -d " " -f 3 | cut -d "." -f 1,2`;
+	ident=$(pgv=$(pg_dump --version| grep "pg_dump" | cut -d " " -f 3); if [[ $(echo "${pgv}" | cut -d "." -f 1) -ge 10 ]]; then echo "${pgv}" | cut -d "." -f 1; else echo "${pgv}" | cut -d "." -f 1,2; fi);
 	if [ ! -z "$ident" ];
 	then
 		PG_PATH=$PG_BASE_PATH$ident'/bin/';
 	else
 		# hard setting
-		ident='9.4';
-		PG_PATH=$PG_BASE_PATH'9.4/bin/';
+		ident='9.6';
+		PG_PATH=$PG_BASE_PATH'9.6/bin/';
 	fi;
 fi;
 

@@ -18,7 +18,9 @@ function usage ()
 }
 
 _port=5432
+PORT='';
 _host='local';
+HOST='';
 _encoding='UTF8';
 set_encoding='';
 REDHAT=0;
@@ -34,45 +36,45 @@ DRY_RUN=0;
 # options check
 while getopts ":f:j:h:p:e:granm" opt
 do
-    # pre test for unfilled
-    if [ "${opt}" = ":" ] || [[ "${OPTARG-}" =~ ${OPTARG_REGEX} ]];
-    then
-        if [ "${opt}" = ":" ];
-        then
-            CHECK_OPT=${OPTARG};
-        else
-            CHECK_OPT=${opt};
-        fi;
-        case ${CHECK_OPT} in
-            h)
-                echo "-h needs a host name";
-                ERROR=1;
-                ;;
-            f)
-                echo "-f needs a folder name";
-                ERROR=1;
-                ;;
-            p)
-                echo "-h needs a port number";
-                ERROR=1;
-                ;;
-            e)
-                echo "-e needs an encoding";
-                ERROR=1;
-                ;;
-            j)
-                echo "-j needs a numeric value for parallel jobs";
-                ERROR=1;
-                ;;
-        esac
-    fi;
+	# pre test for unfilled
+	if [ "${opt}" = ":" ] || [[ "${OPTARG-}" =~ ${OPTARG_REGEX} ]];
+	then
+		if [ "${opt}" = ":" ];
+		then
+			CHECK_OPT=${OPTARG};
+		else
+			CHECK_OPT=${opt};
+		fi;
+		case ${CHECK_OPT} in
+		h)
+			echo "-h needs a host name";
+			ERROR=1;
+			;;
+		f)
+			echo "-f needs a folder name";
+			ERROR=1;
+			;;
+		p)
+			echo "-h needs a port number";
+			ERROR=1;
+			;;
+		e)
+			echo "-e needs an encoding";
+			ERROR=1;
+			;;
+		j)
+			echo "-j needs a numeric value for parallel jobs";
+			ERROR=1;
+			;;
+		esac
+	fi;
 	case $opt in
 		f|file)
 			DUMP_FOLDER=$OPTARG;
 			;;
-        j|jobs)
+		j|jobs)
 			MAX_JOBS=${OPTARG};
-            ;;
+			;;
 		e|encoding)
 			if [ -z "$encoding" ];
 			then
@@ -80,19 +82,21 @@ do
 			fi;
 			;;
 		h|hostname)
-            if [ -z "$host" ];
-            then
+			if [ -z "$host" ];
+			then
 				host='-h '$OPTARG;
 				_host=$OPTARG;
-            fi;
-            ;;
-        p|port)
-            if [ -z "$port" ];
-            then
+				HOST=$OPRTARG;
+			fi;
+			;;
+		p|port)
+			if [ -z "$port" ];
+			then
 				port='-p '$OPTARG;
 				_port=$OPTARG;
-            fi;
-            ;;
+				PORT=$OPTARG;
+			fi;
+			;;
 		g|globals)
 			IMPORT_GLOBALS=0;
 			;;
@@ -106,13 +110,13 @@ do
 			DRY_RUN=1;
 			;;
 		m|help)
-            usage;
-            exit 0;
-            ;;
-        \?)
-            echo -e "\n Option does not exist: $OPTARG\n";
-            usage;
-            exit 1;
+			usage;
+			exit 0;
+			;;
+		\?)
+			echo -e "\n Option does not exist: $OPTARG\n";
+			usage;
+			exit 1;
 			;;
 	esac;
 done;
@@ -145,7 +149,9 @@ fi;
 NUMBER_REGEX="^[0-9]{1,}$";
 # find the max allowed jobs based on the cpu count
 # because setting more than this is not recommended
-cpu=$(cat /proc/cpuinfo | grep processor|tail -n 1);
+# so this fails in vmware hosts were we have random cpus assigned
+#cpu=$(cat /proc/cpuinfo | grep processor|tail -n 1);
+cpu=$(cat /proc/cpuinfo | grep "processor" | wc -l);
 _max_jobs=$[ ${cpu##*: }+1 ]
 # if the MAX_JOBS is not number or smaller 1 or greate _max_jobs
 if [ ! -z "${MAX_JOBS}" ];
@@ -258,7 +264,7 @@ function convert_time
 }
 
 # default version (for folder)
-DBPATH_VERSION='9.4/';
+DBPATH_VERSION='9.6/';
 # if amazon remove "." from version
 if [ "${AMAZON}" -eq 1 ];
 then
@@ -279,8 +285,12 @@ LOGFILE="tee -a $LOGS/PG_RESTORE_DB_FILE.`date +"%Y%m%d_%H%M%S"`.log";
 # get the count for DBs to import
 db_count=`find $DUMP_FOLDER -name "*.sql" -print | wc -l`;
 # start info
-echo "= Will import $db_count from $DUMP_FOLDER" | $LOGFILE;
-echo "= into the DB server $HOST:$PORT" | $LOGFILE;
+if [ "${DUMP_FOLDER}" = "." ]; then _DUMP_FOLDER="[current folder]"; else _DUMP_FOLDER=${DUMP_FOLDER}; fi;
+if [ -z "${HOST}" ]; then _HOST="[auto host]"; else _HOST=${HOST}; fi;
+if [ -z "${PORT}" ]; then _PORT="[auto port]"; else _PORT=${PORT}; fi;
+echo "= Will import $db_count databases from $_DUMP_FOLDER" | $LOGFILE;
+echo "= into the DB server $_HOST:$_PORT" | $LOGFILE;
+echo "= running $MAX_JOBS jobs" | $LOGFILE;
 echo "= import logs: $LOGS" | $LOGFILE;
 echo "" | $LOGFILE;
 pos=1;
@@ -297,8 +307,13 @@ then
 	# get newest and only the first one
 	file=`ls -1t $DUMP_FOLDER/pg_global* | head -1`;
 	filename=`basename $file`;
-	version=`echo $filename | cut -d "." -f 4 | cut -d "-" -f 2`; # db version, without prefix of DB type
-	version=$version'.'`echo $filename | cut -d "." -f 5 | cut -d "_" -f 1`; # db version, second part (after .)
+	# the last _ is for version 10 or higher
+	version=`echo $filename | cut -d "." -f 4 | cut -d "-" -f 2 | cut -d "_" -f 1`; # db version, without prefix of DB type
+	# if this is < 10 then we need the second part too
+	if [ ${version} -lt 10 ];
+	then
+		version=$version'.'`echo $filename | cut -d "." -f 5 | cut -d "_" -f 1`; # db version, second part (after .)
+	fi;
 	# if amazon remove "." from version
 	if [ "${AMAZON}" -eq 1 ];
 	then
@@ -349,8 +364,13 @@ do
 	database=`echo $filename | cut -d "." -f 1`;
 	owner=`echo $filename | cut -d "." -f 2`;
 	__encoding=`echo $filename | cut -d "." -f 3`;
-	version=`echo $filename | cut -d "." -f 4 | cut -d "-" -f 2`; # db version, without prefix of DB type
-	version=$version'.'`echo $filename | cut -d "." -f 5 | cut -d "_" -f 1`; # db version, second part (after .)
+	# the last _ part if for version 10
+	version=`echo $filename | cut -d "." -f 4 | cut -d "-" -f 2 | cut -d "_" -f 1`; # db version, without prefix of DB type
+	# if this is < 10 then we need the second part too
+	if [ ${version} -lt 10 ];
+	then
+		version=$version'.'`echo $filename | cut -d "." -f 5 | cut -d "_" -f 1`; # db version, second part (after .)
+	fi;
 	# if amazon remove "." from version
 	if [ "${AMAZON}" -eq 1 ];
 	then
@@ -433,14 +453,17 @@ do
 		else
 			echo "$DBPATH$CREATEDB -U postgres -O $owner -E $set_encoding -T $TEMPLATEDB $host $port $database";
 		fi;
-		echo "+ Create plpgsql lang in DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
-		if [ ${DRY_RUN} -eq 0 ];
+		if [ -f $DBPATH$CREATELANG ];
 		then
-			$DBPATH$CREATELANG -U postgres plpgsql $host $port $database;
-		else
-			echo "$DBPATH$CREATELANG -U postgres plpgsql $host $port $database";
+			echo "+ Create plpgsql lang in DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
+			if [ ${DRY_RUN} -eq 0 ];
+			then
+				$DBPATH$CREATELANG -U postgres plpgsql $host $port $database;
+			else
+				echo "$DBPATH$CREATELANG -U postgres plpgsql $host $port $database";
+			fi;
 		fi;
-		echo "% Restore data from '$filename' to DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
+		echo "% Restore data from '$filename' to DB '$database' using $MAX_JOBS jobs [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
 		if [ ${DRY_RUN} -eq 0 ];
 		then
 			$DBPATH$PGRESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>$LOGS'/errors.'$database'.'$(date +"%Y%m%d_%H%M%S".log);
@@ -449,7 +472,7 @@ do
 		fi;
 		# BUG FIX FOR POSTGRESQL 9.6.2 db_dump
 		# it does not dump the default public ACL so the owner of the DB cannot access the data, check if the ACL dump is missing and do a basic restore
-		if [ -z $($DBPATH$PGRESTORE -l $file | grep -- "ACL - public postgres") ];
+		if [ -z "$($DBPATH$PGRESTORE -l $file | grep -- "ACL - public postgres")" ];
 		then
 			echo "? Fixing missing basic public schema ACLs from DB $database [$_host:$_port] @ `date +"%F %T"`";
 			# grant usage on schema public to public;

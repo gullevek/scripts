@@ -52,7 +52,7 @@ PORT_REGEX="^[0-9]{4,5}$";
 OPTARG_REGEX="^-";
 # defaults
 _BACKUPDIR='/mnt/backup/db_dumps_fc/';
-_DB_VERSION=$(pg_dump --version | grep "pg_dump" | cut -d " " -f 3 | cut -d "." -f 1,2);
+_DB_VERSION=$(pgv=$(pg_dump --version| grep "pg_dump" | cut -d " " -f 3); if [[ $(echo "${pgv}" | cut -d "." -f 1) -ge 10 ]]; then echo "${pgv}" | cut -d "." -f 1; else echo "${pgv}" | cut -d "." -f 1,2; fi);
 _DB_USER='postgres';
 _DB_PASSWD='';
 _DB_HOST='';
@@ -149,29 +149,29 @@ do
 			fi;
 			;;
 		u|user)
-            if [ -z "${DB_USER}" ];
-            then
-                DB_USER=${OPTARG};
-            fi;
-            ;;
-        h|hostname)
-            if [ -z "${DB_HOST}" ];
-            then
+			if [ -z "${DB_USER}" ];
+			then
+				DB_USER=${OPTARG};
+			fi;
+			;;
+		h|hostname)
+			if [ -z "${DB_HOST}" ];
+			then
 				DB_HOST=${OPTARG};
-            fi;
-            ;;
-        p|port)
-            if [ -z "${DB_PORT}" ];
-            then
+			fi;
+			;;
+		p|port)
+			if [ -z "${DB_PORT}" ];
+			then
 				DB_PORT=${OPTARG};
-            fi;
-            ;;
-        l|login)
-            if [ -z "${DB_PASSWD}" ];
-            then
+			fi;
+			;;
+		l|login)
+			if [ -z "${DB_PASSWD}" ];
+			then
 				DB_PASSWD=${OPTARG};
-            fi;
-            ;;
+			fi;
+			;;
 		d|database)
 			if [ ! -z "${INCLUDE}" ];
 			then
@@ -193,16 +193,16 @@ do
 			AMAZON=1;
 			;;
 		m|manual)
-            usage;
-            exit 0;
-            ;;
-        :)
+			usage;
+			exit 0;
+			;;
+		:)
 			echo "Option -$OPTARG requires an argument."
 			;;
-        \?)
-            echo -e "\n Option does not exist: ${OPTARG}\n";
-            usage;
-            exit 1;
+		\?)
+			echo -e "\n Option does not exist: ${OPTARG}\n";
+			usage;
+			exit 1;
 			;;
 	esac;
 done;
@@ -276,6 +276,7 @@ db='';
 if [ ! -f ${PG_PSQL} ] || [ ! -f ${PG_DUMP} ] || [ ! -f ${PG_DUMPALL} ];
 then
 	echo "One of the core binaries (psql, pg_dump, pg_dumpall) could not be found.";
+	echo "Searching in ${PG_PATH} folder";
 	echo "Backup aborted";
 	exit 0;
 fi;
@@ -313,7 +314,7 @@ fi;
 # if we have an ident override set, set a different DUMP VERSION here than the automatic one
 if [ "${SET_IDENT}" -eq 1 ];
 then
-	DUMP_DB_VERSION=$(${PG_PATH}/pg_dump --version | grep "pg_dump" | cut -d " " -f 3 | cut -d "." -f 1,2);
+	DUMP_DB_VERSION=$(pgv=$(${PG_PATH}/pg_dump --version| grep "pg_dump" | cut -d " " -f 3); if [[ $(echo "${pgv}" | cut -d "." -f 1) -ge 10 ]]; then echo "${pgv}" | cut -d "." -f 1; else echo "${pgv}" | cut -d "." -f 1,2; fi);
 else
 	DUMP_DB_VERSION=${DB_VERSION};
 fi;
@@ -418,7 +419,7 @@ function get_dump_file_name
 	seq='';
 	# we need to find the next sequence number
 	for i in $(ls -1 ${file} 2>/dev/null);
-	do 
+	do
 		# get the last sequence and cut any leading 0 so we can run +1 on it
 		seq=$(echo $i | cut -d "." -f 3 | cut -d "_" -f 4 | sed -e "s/^0//g");
 	done;
