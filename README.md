@@ -7,6 +7,7 @@ various scripts for administration help
 * backup: backup script for full/incr backup to a local folder
 * attic: attic wrapper and attic mount script
 * borg: borg wrapper and borg mount script (borg is a replacement for attic)
+* csv: various scripts for CSV check and clean up
 * dump_database: various scripts to dump postgresql or mysql databases, restore them and also for WAL file backup
 * file_manage: compare script for two csv files and output of matches/not matches to a third file
 * iptables_log_output: parse iptables kernel log output for a readable format
