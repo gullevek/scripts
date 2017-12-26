@@ -8,12 +8,18 @@ locality='';
 organization='';
 organizationalunit='';
 commonname=''; # that is the domain
+verbose=0;
 
 # $1 is a file with all the data in | separated form
 if [ ! -f "${1}" ];
 then
 	echo "The input file '${1}' is not set or could not be read";
 	exit 0;
+fi;
+# any 2nd entry turns on verbose and prints out csr/key to command line
+if [ ! -z "${2}" ];
+then
+	verbose=1;
 fi;
 
 # loop through file and create all the data in the current folder
@@ -27,7 +33,7 @@ do
 	organizationalunit=$(echo "${i}" | cut -d "|" -f 5);
 	commonname=$(echo "${i}" | cut -d "|" -f 6);
 	password=$(echo "${i}" | cut -d "|" -f 7);
-	echo "------------------- [START: ${commonname}]";
+	echo "--------------------- [START: ${commonname}]";
 	# error flag
 	error=0;
 	# one is missing, we abort
@@ -41,7 +47,7 @@ do
 	done;
 	if [ ${error} = 1 ];
 	then
-		echo "------------------- [ERROR]";
+		echo "--------------------- [ERROR]";
 		exit 0;
 	fi;
 	# copy for file handling (gets folder prefixed)
@@ -61,5 +67,25 @@ do
 	echo "VIEW CSR: openssl req -text -noout -verify -in ${domain}.csr";
 	echo "VIEW CRT: openssl x509 -in ${domain}.crt -text -noout";
 	echo "VIEW PEM/KEY: openssl rsa -noout -text -in ${domain}.pem";
-	echo "------------------- [OK]";
+
+	# print out the CSR and KEY [the ones we need]
+	if [ "${verbose}" = 1 ];
+	then
+		echo "";
+		echo "=====================";
+		echo "=        CSR        =";
+		echo "=====================";
+		cat ${domain}.csr;
+		echo "=====================";
+
+		echo "";
+		echo "=====================";
+		echo "=        KEY        =";
+		echo "=====================";
+		cat ${domain}.key;
+		echo "=====================";
+		echo "";
+	fi;
+
+	echo "--------------------- [OK]";
 done;
