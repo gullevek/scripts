@@ -50,9 +50,10 @@ do
 		echo "--------------------- [ERROR]";
 		exit 0;
 	fi;
-	# copy for file handling (gets folder prefixed)
-	mkdir ${commonname};
-	domain=${commonname}'/'${commonname};
+	# copy for file handling (gets folder prefixed with date + domain name)
+	path=$(date +%F)'/'${commonname};
+	mkdir -p ${path}
+	domain=${path}'/'${commonname};
 	# start generating
 	echo "Creating base pem for ${commonname}";
 	openssl genrsa -des3 -passout pass:${password} -out ${domain}.pem 2048 -noout;
