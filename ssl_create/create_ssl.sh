@@ -51,9 +51,11 @@ do
 		exit 0;
 	fi;
 	# copy for file handling (gets folder prefixed with date + domain name)
-	path=$(date +%F)'/'${commonname};
+	# if we have *. we strip the *. and replace it with WILDCARD
+	domain=$(echo "${commonname}" | sed -e 's/\*\./WILDCARD\./');
+	path=$(date +%F)'/'${domain};
 	mkdir -p ${path}
-	domain=${path}'/'${commonname};
+	domain=${path}'/'${domain};
 	# start generating
 	echo "Creating base pem for ${commonname}";
 	openssl genrsa -des3 -passout pass:${password} -out ${domain}.pem 2048 -noout;
