@@ -213,6 +213,7 @@ my $last_percent = 0;
 # for counts
 my $input_file_rows = 0;
 my $output_file_rows = 0;
+my $compare_file_rows = 0;
 # base file io handlers
 my $COMPARE;
 my $OUTPUT;
@@ -266,6 +267,7 @@ while (<$COMPARE>)
 				if (defined($row[$pos]))
 				{
 					$compare_data{$compare}{$row[$pos]} = 1;
+					$compare_file_rows ++;
 				}
 				else
 				{
@@ -376,8 +378,9 @@ $end_time = time();
 
 print $sep_line."\n";
 print "Finished compare\n";
-print "Input file : ".format_number($input_file_rows)."\n";
-print "Output file: ".format_number($output_file_rows)."\n";
+print "Input file  : ".format_number($input_file_rows)."\n";
+print "Compare file: ".format_number($compare_file_rows)."\n";
+print "Output file : ".format_number($output_file_rows)."\n";
 print "Start: ".create_time($start_time).", End: ".create_time($end_time).", Running Time: ".convert_time($end_time - $start_time)."\n";
 print $sep_line."\n";
 
