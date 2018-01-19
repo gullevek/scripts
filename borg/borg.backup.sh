@@ -173,9 +173,9 @@ if [ ${INIT_REPOSITORY} -eq 1 ];
 then
 	if [ ${DEBUG} -eq 1 ];
 	then
-		echo "borg init ${OPT_VERBOSE} ${REPOSITORY}";
+		echo "borg init -e ${ENCRYPTION} ${OPT_VERBOSE} ${REPOSITORY}";
 	else
-		borg init ${OPT_VERBOSE} ${REPOSITORY}; # should trap and exit properly here
+		borg init -e ${ENCRYPTION} ${OPT_VERBOSE} ${REPOSITORY}; # should trap and exit properly here
 	fi
 fi;
 

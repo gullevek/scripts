@@ -10,6 +10,13 @@ BACKUP_FILE="some-prefix-"`hostname`".borg";
 # level, if empty then default, else number between 0 and 9
 COMPRESSION="zlib"
 COMPRESSION_LEVEL=""
+# encryption settings:
+# SHA-256: 'none', 'authenticated', 'repokey', 'keyfile'
+# BLAKE2b: 'authenticated-blake2', 'repokey-blake2', 'keyfile-blake2'
+# Note: none does not encrypt
+# Blank passwords allowed for only key (if used, use keyfile)
+# See: http://borgbackup.readthedocs.io/en/stable/faq.html#how-can-i-specify-the-encryption-passphrase-programmatically
+ENCRYPTION="none"
 # todays date
 DATE=`date +%Y-%m-%d`;
 # post run cleanup times
