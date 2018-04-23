@@ -7,6 +7,8 @@
 function usage ()
 {
 	cat <<- EOT
+	Restores a single database dump to a database
+
 	Usage: ${0##/*/} -o <DB OWNER> -d <DB NAME> -f <FILE NAME> [-h <DB HOST>] [-p <DB PORT>] [-e <ENCODING>] [-i <POSTGRES VERSION>] [-j <JOBS>] [-r|-a] [-n]
 
 	-o <DB OWNER>: The user who will be owner of the database to be restored

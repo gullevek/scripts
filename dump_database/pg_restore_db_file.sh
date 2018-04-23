@@ -3,6 +3,8 @@
 function usage ()
 {
 	cat <<- EOT
+	Restores a list of database dumps from a folder to a database server
+
 	Usage: ${0##/*/} -f <dump folder> [-j <JOBS>] [-e <ENCODING>] [-h <HOST>] [-r|-a] [-g] [-n]
 
 	-e <ENCODING>: override global encoding, will be overruled by per file encoding
