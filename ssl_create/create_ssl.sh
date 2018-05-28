@@ -72,7 +72,7 @@ do
 		v|verbose)
 			verbose=$[ $verbose+1 ];
 			;;
-		m|help)
+		h|help)
 			usage;
 			exit 0;
 			;;
