@@ -374,6 +374,8 @@ echo "USING POSTGRESQL: $ident";
 if [ ! -f $PG_PSQL ] || [ ! -f $PG_DROPDB ] || [ ! -f $PG_CREATEDB ] || [ ! -f $PG_CREATELANG ] || [ ! -f $PG_RESTORE ];
 then
 	echo "One of the core binaries (psql, pg_dump, pg_createdb, pg_createlang, pg_restore) could not be found.";
+	echo "Search Path: ${PG_PATH}";
+	echo "Perhaps manual ident set with -i is necessary";
 	echo "Backup aborted";
 	exit 0;
 fi;

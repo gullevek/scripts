@@ -276,7 +276,8 @@ db='';
 if [ ! -f ${PG_PSQL} ] || [ ! -f ${PG_DUMP} ] || [ ! -f ${PG_DUMPALL} ];
 then
 	echo "One of the core binaries (psql, pg_dump, pg_dumpall) could not be found.";
-	echo "Searching in ${PG_PATH} folder";
+	echo "Search Path: ${PG_PATH}";
+	echo "Perhaps manual ident set with -i is necessary";
 	echo "Backup aborted";
 	exit 0;
 fi;

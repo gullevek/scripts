@@ -15,6 +15,9 @@ function usage ()
 	EOT
 }
 
+# input sample
+# Country|State|Location|Organization|Organizational Unit|domain name|password
+
 country='';
 state='';
 locality='';
