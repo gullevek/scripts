@@ -461,6 +461,6 @@ else
 	fi;
 	echo "Restore of data $file for DB $database [$_host:$_port] finished";
 	DURATION=$[ `date +'%s'`-$START ];
-	echo "Start at $start_time and end at `date +"%F %T"` and ran for $(convert_time ${DURATION}) seconds";
+	echo "Start at $start_time and end at `date +"%F %T"` and ran for $(convert_time ${DURATION})";
 	echo "=== END RESTORE" >>restore_errors.$LOG_FILE_EXT;
 fi;
