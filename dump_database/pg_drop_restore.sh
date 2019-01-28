@@ -171,7 +171,7 @@ NUMBER_REGEX="^[0-9]{1,}$";
 # find the max allowed jobs based on the cpu count
 # because setting more than this is not recommended
 cpu=$(cat /proc/cpuinfo | grep processor|tail -n 1);
-_max_jobs=$[ ${cpu##*: }+1 ]
+_max_jobs=$[ ${cpu##*: }+0 ]
 # if the MAX_JOBS is not number or smaller 1 or greate _max_jobs
 if [ ! -z "${MAX_JOBS}" ];
 then
@@ -371,9 +371,9 @@ LOG_FILE_EXT=$database.`date +"%Y%m%d_%H%M%S"`".log";
 echo "USING POSTGRESQL: $ident";
 
 # core abort if no core files found
-if [ ! -f $PG_PSQL ] || [ ! -f $PG_DROPDB ] || [ ! -f $PG_CREATEDB ] || [ ! -f $PG_CREATELANG ] || [ ! -f $PG_RESTORE ];
+if [ ! -f $PG_PSQL ] || [ ! -f $PG_DROPDB ] || [ ! -f $PG_CREATEDB ] || [ ! -f $PG_RESTORE ];
 then
-	echo "One of the core binaries (psql, pg_dump, pg_createdb, pg_createlang, pg_restore) could not be found.";
+	echo "One of the core binaries (psql, pg_dump, createdb, pg_restore) could not be found.";
 	echo "Search Path: ${PG_PATH}";
 	echo "Perhaps manual ident set with -i is necessary";
 	echo "Backup aborted";
@@ -423,12 +423,15 @@ else
 		echo $PG_CREATEDB -U postgres -O $owner -E $encoding -T $TEMPLATEDB $host $port $database;
 	fi;
 	# CREATE plpgsql LANG
-	echo "Create plpgsql lang in DB $database [$_host:$_port] @ `date +"%F %T"`";
-	if [ $DRY_RUN -eq 0 ];
+	if [ -f $PG_CREATELANG ];
 	then
-		$PG_CREATELANG -U postgres plpgsql $host $port $database;
-	else
-		echo $PG_CREATELANG -U postgres plpgsql $host $port $database;
+		echo "Create plpgsql lang in DB $database [$_host:$_port] @ `date +"%F %T"`";
+		if [ $DRY_RUN -eq 0 ];
+		then
+			$PG_CREATELANG -U postgres plpgsql $host $port $database;
+		else
+			echo $PG_CREATELANG -U postgres plpgsql $host $port $database;
+		fi;
 	fi;
 	# RESTORE DATA
 	echo "Restore data from $file to DB $database and $MAX_JOBS [$_host:$_port] @ `date +"%F %T"`";

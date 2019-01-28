@@ -535,9 +535,9 @@ function clean_up
 					echo "- Remove old backups for '${name}', found ${count}, will delete ${TO_DELETE}";
 					if [ ${TEST} -eq 0 ];
 					then
-						ls ${BACKUPDIR}/${name}${DB_TYPE}*.sql|head -n ${TO_DELETE}|xargs rm;
+						ls -tr ${BACKUPDIR}/${name}${DB_TYPE}*.sql|head -n ${TO_DELETE}|xargs rm;
 					else
-						echo "ls ${BACKUPDIR}/${name}${DB_TYPE}*.sql|head -n ${TO_DELETE}|xargs rm";
+						echo "ls -tr ${BACKUPDIR}/${name}${DB_TYPE}*.sql|head -n ${TO_DELETE}|xargs rm";
 					fi;
 				fi;
 			fi;
