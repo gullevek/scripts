@@ -5,11 +5,12 @@
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} -f <input file> [-o <optional output folder>] [-v [-v] ...]
+	Usage: ${0##/*/} -f <input file> [-o <optional output folder>] [-s] [-v [-v] ...]
 
 	-f: mandatory input file. CSV format with | separations
 	    Format:
 	    Country|State|Location|Organization|Organizational Unit|domain name|password
+	-s: switch output path from <date>/<domain> to <domain>/<date?
 	-o: optional output folder. If not given, then output will be written to current folder
 	-v: verbose output (CSR/KEY) as echo to terminal
 	EOT
@@ -32,8 +33,9 @@ logfile="ssl_create.$(date +%Y%m%d_%H%M%S).log";
 # opt args
 FILE=''; # file to read in
 OUTPUT=''; # optional target path
+SWITCH_FOLDER=0;
 
-while getopts ":f:o:v" opt
+while getopts ":f:o:sv" opt
 do
 	# pre test for unfilled
 	if [ "${opt}" = ":" ] || [[ "${OPTARG-}" =~ ${OPTARG_REGEX} ]];
@@ -70,6 +72,10 @@ do
 			then
 				OUTPUT="${OPTARG}";
 			fi;
+			;;
+		# switch folder output path
+		s|switch)
+			SWITCH_FOLDER=1;
 			;;
 		# verbose output
 		v|verbose)
@@ -158,7 +164,11 @@ do
 	# copy for file handling (gets folder prefixed with date + domain name)
 	# if we have *. we strip the *. and replace it with WILDCARD
 	domain=$(echo "${commonname}" | sed -e 's/\*\./WILDCARD\./');
-	path=${OUTPUT}$(date +%F)'/'${domain};
+	if [ ${SWITCH_FOLDER} == 1 ]; then
+		path=${OUTPUT}${domain}'/'$(date +%F);
+	else
+		path=${OUTPUT}$(date +%F)'/'${domain};
+	fi;
 	mkdir -p ${path}
 	domain=${path}'/'${domain};
 	# start generating
