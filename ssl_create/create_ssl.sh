@@ -1,6 +1,6 @@
 #!/bin/bash
 # creates SSL key requests from a input file
-# needs country|state|locality|organization|domain|password
+# needs country|state|locality|organization|organization unit|domain|password
 
 function usage ()
 {
