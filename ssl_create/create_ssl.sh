@@ -1,6 +1,6 @@
 #!/bin/bash
 # creates SSL key requests from a input file
-# needs country|state|locality|organization|organization unit|domain|password
+# needs country|state|locality|organization|organization unit|domain|password|confirm email
 
 function usage ()
 {
@@ -17,7 +17,7 @@ function usage ()
 }
 
 # input sample
-# Country|State|Location|Organization|Organizational Unit|domain name|password
+# Country|State|Location|Organization|Organizational Unit|domain name|password|confirm email
 
 country='';
 state='';
@@ -144,6 +144,7 @@ do
 	organizationalunit=$(echo "${i}" | cut -d "|" -f 5);
 	commonname=$(echo "${i}" | cut -d "|" -f 6);
 	password=$(echo "${i}" | cut -d "|" -f 7);
+	orderemail=$(echo "${i}" | cut -d "|" -f 8);
 	echo "--------------------- [START: ${commonname}]" | $LOGFILE;
 	# error flag
 	error=0;
@@ -173,7 +174,7 @@ do
 	domain=${path}'/'${domain};
 	# start generating
 	echo "Creating base pem for ${commonname}" | $LOGFILE;
-	openssl genrsa -des3 -passout pass:${password} -out ${domain}.pem 2048 -noout | $LOGFILE;
+	openssl genrsa -des3 -passout pass:${password} -out ${domain}.pem 2048 | $LOGFILE;
 	# generate csr
 	echo "Creating CSR for ${commonname} with '/C=${country}/ST=${state}/L=${locality}/O=${organization}/OU=${organizationalunit}/CN=${commonname}'" | $LOGFILE;
 	openssl req -new -key ${domain}.pem -out ${domain}.csr -passin pass:${password} -subj "/C=${country}/ST=${state}/L=${locality}/O=${organization}/OU=${organizationalunit}/CN=${commonname}" | $LOGFILE;
@@ -185,6 +186,8 @@ do
 	echo "VIEW CSR: openssl req -text -noout -verify -in ${domain}.csr" | $LOGFILE;
 	echo "VIEW CRT: openssl x509 -in ${domain}.crt -text -noout" | $LOGFILE;
 	echo "VIEW PEM/KEY: openssl rsa -noout -text -in ${domain}.pem" | $LOGFILE;
+
+	echo "ORDER EMAIL: "${orderemail} | $LOGFILE;
 
 	# print out the CSR and KEY [the ones we need]
 	if [ "${verbose}" = 1 ];
