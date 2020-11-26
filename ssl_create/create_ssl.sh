@@ -10,7 +10,7 @@ function usage ()
 	-f: mandatory input file. CSV format with | separations
 	    Format:
 	    Country|State|Location|Organization|Organizational Unit|domain name|password
-	-s: switch output path from <date>/<domain> to <domain>/<date?
+	-s: switch output path from <date>/<domain> to <domain>/<date>
 	-o: optional output folder. If not given, then output will be written to current folder
 	-v: verbose output (CSR/KEY) as echo to terminal
 	EOT

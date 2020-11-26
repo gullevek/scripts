@@ -52,7 +52,8 @@ my $tar = '/bin/tar';
 
 # log for rsync
 my $rsync_log_file = '/var/log/rsync/remote_backup_rsync.log';
-my $rsync_log_file_format = '%o %i %f%L %l';
+#my $rsync_log_file_format = '%o %i [%B:%4U:%4G] %f%L [--> %l => %b]';
+my $rsync_log_file_format = "%o %i [%B:%4U:%4G] %f%L [--> %'l {%''l} => %'b {%''b}]";
 
 my $day_seconds = 86400; # seconds of one day (24 * 60 * 60)
 
@@ -253,8 +254,8 @@ for my $backup (@backups)
 				my $sshkey = $backup->{'sshkey'} ? " -i /root/.ssh/".$backup->{'sshkey'} : '';
 				`mkdir $path` if (!$test);
 				# please see the rsync man page for description of flags
-				print "[".now()."] Command: $rsync -Plzvruptog --log-file=$rsync_log_file --log-file-format=\"$rsync_log_file_format\" --stats -e \"ssh$sshkey\" $login:$webroot* $path\n";
-				`$rsync -Plzvruptog --log-file=$rsync_log_file --log-file-format="$rsync_log_file_format" --stats -e \"ssh$sshkey\" $login:$webroot* $path` if (!$test);
+				print "[".now()."] Command: $rsync -Plzvruptog -hh --log-file=$rsync_log_file --log-file-format=\"$rsync_log_file_format\" --stats -e \"ssh$sshkey\" $login:$webroot* $path\n";
+				`$rsync -Plzvruptog -hh --log-file=$rsync_log_file --log-file-format="$rsync_log_file_format" --stats -e \"ssh$sshkey\" $login:$webroot* $path` if (!$test);
 				# make a bzip2 from the parth
 				print "[".now()."] Command: $tar cvfj $backupfile $path\n";
 				`$tar cvfj $backupfile $path` if (!$test);
@@ -281,8 +282,8 @@ for my $backup (@backups)
 			# set the ssh key file if it is needed
 			my $sshkey = $backup->{'sshkey'} ? " -i /root/.ssh/".$backup->{'sshkey'} : '';
 			# please see the rsync man page for description of flags
-			print "[".now()."] Command: $rsync -Plzvruptog --delete --log-file=$rsync_log_file --log-file-format=\"$rsync_log_file_format\" --stats -e \"ssh$sshkey\" $login:$root* $path\n";
-			`$rsync -Plzvruptog --delete --log-file=$rsync_log_file --log-file-format="$rsync_log_file_format" --stats -e \"ssh$sshkey\" $login:$root* $path` if (!$test);
+			print "[".now()."] Command: $rsync -Plzvruptog -hh --delete --log-file=$rsync_log_file --log-file-format=\"$rsync_log_file_format\" --stats -e \"ssh$sshkey\" $login:$root* $path\n";
+			`$rsync -Plzvruptog -hh --delete --log-file=$rsync_log_file --log-file-format="$rsync_log_file_format" --stats -e \"ssh$sshkey\" $login:$root* $path` if (!$test);
 			# if we have remote data delete, delete all data in the remote folders, but keep the folders itself
 			if (defined($backup->{'remote_backup'}) && $backup->{'remote_data'} eq 'delete')
 			{

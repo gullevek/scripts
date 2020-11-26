@@ -88,6 +88,11 @@ do
 	then
 		# should I clean the title to alphanumeric? (well yes, but not now)
 		SCREEN_NAME=$line;
+		# check that we do not create double entries
+		if screen -list | grep -q "${SCREEN_NAME}"; then
+			echo "Screen with ${SCREEN_NAME} already exists";
+			exit;
+		fi;
 	else
 		# extract screen title and command (should also be cleaned for title)
 		SCREEN_TITLE=$(echo "$line" | cut -d "#" -f 1);
@@ -111,7 +116,7 @@ do
 		then
 			echo "[$SCREEN_POS] Run command '$SCREEN_CMD'";
 			# if ^M is garbled: in vim do: i, ^V, ENTER, ESCAPE
-			screen -r "$SCREEN_NAME" -p $SCREEN_POS -X stuff $"$SCREEN_CMD ";
+			screen -r "$SCREEN_NAME" -p $SCREEN_POS -X stuff $"$SCREEN_CMD^M";
 		fi;
 	fi;
 	pos=$[ $pos+1 ];
