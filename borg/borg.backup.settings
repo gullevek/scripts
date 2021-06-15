@@ -17,8 +17,8 @@ COMPRESSION_LEVEL=""
 # Blank passwords allowed for only key (if used, use keyfile)
 # See: http://borgbackup.readthedocs.io/en/stable/faq.html#how-can-i-specify-the-encryption-passphrase-programmatically
 ENCRYPTION="none"
-# todays date
-DATE=`date +%Y-%m-%d`;
+# todays date, if more than one per day add -%H%M for hour/minute
+DATE=$(date +%Y-%m-%d);
 # post run cleanup times
 KEEP_DAYS=7;
 KEEP_WEEKS=4;

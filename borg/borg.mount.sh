@@ -30,8 +30,7 @@ function usage ()
 }
 
 # set options
-while getopts ":c:m:uf:h" opt
-do
+while getopts ":c:m:uf:h" opt do
 	case "${opt}" in
 		c|config)
 			BASE_FOLDER=${OPTARG};
@@ -60,27 +59,25 @@ do
 	esac;
 done;
 
-if [ ! -d "${MOUNT_PATH}" ];
-then
+if [ ! -d "${MOUNT_PATH}" ]; then
 	echo "The mount path ${MOUNT_PATH} cannot be found";
 	exit 0;
 fi;
 
-if [ ${UMOUNT} -eq 0 ];
-then
+# add trailing slahd for base folder
+[[ "${BASE_FOLDER}" != */ ]] && BASE_FOLDER="${BASE_FOLDER}/";
+
+if [ ${UMOUNT} -eq 0 ]; then
 	TARGET_SERVER='';
-	if [ -z "${ATTIC_BACKUP_FILE}" ];
-	then
-		if [ ! -f "${BASE_FOLDER}${SETTINGS_FILE}" ];
-		then
+	if [ -z "${ATTIC_BACKUP_FILE}" ]; then
+		if [ ! -f "${BASE_FOLDER}${SETTINGS_FILE}" ]; then
 			echo "Cannot find ${BASE_FOLDER}${SETTINGS_FILE}";
 			exit 0;
 		fi;
 		. ${BASE_FOLDER}${SETTINGS_FILE}
 		# set the borg backup file base on the settings data
 		# if we have user/host then we build the ssh command
-		if [ ! -z "${TARGET_USER}" ] && [ ! -z "${TARGET_HOST}" ];
-		then
+		if [ ! -z "${TARGET_USER}" ] && [ ! -z "${TARGET_HOST}" ]; then
 			TARGET_SERVER=${TARGET_USER}"@"${TARGET_HOST}":";
 		fi;
 		REPOSITORY=${TARGET_SERVER}${TARGET_FOLDER}${BACKUP_FILE};
@@ -90,22 +87,18 @@ then
 
 	# check that the repostiory exists
 	REPOSITORY_OK=0;
-	if [ ! -z "${TARGET_SERVER}" ];
-	then
+	if [ ! -z "${TARGET_SERVER}" ]; then
 		# remove trailing : for this
 		TARGET_SERVER=${TARGET_SERVER/:};
 		# use ssh command to check remote existense
-		if [ `ssh "${TARGET_SERVER}" "if [ -d \"${TARGET_FOLDER}${BACKUP_FILE}\" ]; then echo 1; else echo 0; fi;"` -eq 1 ];
-		then
+		if [ `ssh "${TARGET_SERVER}" "if [ -d \"${TARGET_FOLDER}${BACKUP_FILE}\" ]; then echo 1; else echo 0; fi;"` -eq 1 ]; then
 			REPOSITORY_OK=1;
 		fi;
-	elif [ -d "${REPOSITORY}" ];
-	then
+	elif [ -d "${REPOSITORY}" ]; then
 		REPOSITORY_OK=1;
 	fi;
 
-	if [ ${REPOSITORY_OK} -eq 0 ];
-	then
+	if [ ${REPOSITORY_OK} -eq 0 ]; then
 		echo "Repository ${REPOSITORY} does not exists";
 		exit 0;
 	fi;
