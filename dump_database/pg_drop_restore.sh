@@ -38,13 +38,10 @@ PORT_REGEX="^[0-9]{4,5}$";
 OPTARG_REGEX="^-";
 MAX_JOBS='';
 # if we have options, set them and then ignore anything below
-while getopts ":o:d:h:f:p:e:i:j:raqnm" opt
-do
+while getopts ":o:d:h:f:p:e:i:j:raqnm" opt; do
 	# pre test for unfilled
-	if [ "${opt}" = ":" ] || [[ "${OPTARG-}" =~ ${OPTARG_REGEX} ]];
-	then
-		if [ "${opt}" = ":" ];
-		then
+	if [ "${opt}" = ":" ] || [[ "${OPTARG-}" =~ ${OPTARG_REGEX} ]]; then
+		if [ "${opt}" = ":" ]; then
 			CHECK_OPT=${OPTARG};
 		else
 			CHECK_OPT=${opt};
@@ -86,46 +83,39 @@ do
 	fi;
 	case $opt in
 		o|owner)
-			if [ -z "$owner" ];
-			then
+			if [ -z "$owner" ]; then
 				owner=$OPTARG;
 			fi;
 			;;
 		d|database)
-			if [ -z "$database" ];
-			then
+			if [ -z "$database" ]; then
 				database=$OPTARG;
 			fi;
 			;;
 		e|encoding)
-			if [ -z "$encoding" ];
-			then
+			if [ -z "$encoding" ]; then
 				encoding=$OPTARG;
 			fi;
 			;;
 		f|file)
-			if [ -z "$file" ];
-			then
+			if [ -z "$file" ]; then
 				file=$OPTARG;
 			fi;
 			;;
 		h|hostname)
-			if [ -z "$host" ];
-			then
+			if [ -z "$host" ]; then
 				host='-h '$OPTARG;
 				_host=$OPTARG;
 			fi;
 			;;
 		p|port)
-			if [ -z "$port" ];
-			then
+			if [ -z "$port" ]; then
 				port='-p '$OPTARG;
 				_port=$OPTARG;
 			fi;
 			;;
 		i|ident)
-			if [ -z "$ident" ];
-			then
+			if [ -z "$ident" ]; then
 				ident=$OPTARG;
 			fi;
 			;;
@@ -156,14 +146,12 @@ do
 	esac;
 done;
 
-if [ "$REDHAT" -eq 1 ] && [ "$AMAZON" -eq 1 ];
-then
+if [ "$REDHAT" -eq 1 ] && [ "$AMAZON" -eq 1 ]; then
 	echo "You cannot set the -a and -r flag at the same time";
 	exit 1;
 fi;
 # check that the port is a valid number
-if ! [[ "$_port" =~ $PORT_REGEX ]];
-then
+if ! [[ "$_port" =~ $PORT_REGEX ]]; then
 	echo "The port needs to be a valid number: $_port";
 	exit 1;
 fi;
@@ -173,16 +161,13 @@ NUMBER_REGEX="^[0-9]{1,}$";
 cpu=$(cat /proc/cpuinfo | grep processor|tail -n 1);
 _max_jobs=$[ ${cpu##*: }+0 ]
 # if the MAX_JOBS is not number or smaller 1 or greate _max_jobs
-if [ ! -z "${MAX_JOBS}" ];
-then
+if [ ! -z "${MAX_JOBS}" ]; then
 	# check that it is a valid number
-	if ! [[ "$MAX_JOBS" =~ $NUMBER_REGEX ]];
-	then
+	if ! [[ "$MAX_JOBS" =~ $NUMBER_REGEX ]]; then
 		echo "Please enter a number for the -j option";
 		exit 1;
 	fi;
-	if [ "${MAX_JOBS}" -lt 1 ] || [ "${MAX_JOBS}" -gt ${_max_jobs} ];
-	then
+	if [ "${MAX_JOBS}" -lt 1 ] || [ "${MAX_JOBS}" -gt ${_max_jobs} ]; then
 		echo "The value for the jobs option -j cannot be smaller than 1 or bigger than ${_max_jobs}";
 		exit 1;
 	fi;
@@ -192,15 +177,13 @@ else
 fi;
 
 # check if we have the 'bc' command available or not
-if [ -f "${BC}" ];
-then
+if [ -f "${BC}" ]; then
 	BC_OK=1;
 else
 	BC_OK=0;
 fi;
 
-if [ ! -f "${file}" ];
-then
+if [ ! -f "${file}" ]; then
 	echo "File name needs to be provided or file could not be found";
 	exit 1;
 fi;
@@ -223,11 +206,9 @@ function convert_time
 	timenames=("d" "h" "m" "s"); # day, hour, min, sec
 	output=( );
 	time_string=;
-	for timeslice in ${timegroups[@]};
-	do
+	for timeslice in ${timegroups[@]}; do
 		# floor for the division, push to output
-		if [ ${BC_OK} -eq 1 ];
-		then
+		if [ ${BC_OK} -eq 1 ]; then
 			output[${#output[*]}]=$(echo "${timestamp}/${timeslice}" | bc);
 			timestamp=$(echo "${timestamp}%${timeslice}" | bc);
 		else
@@ -236,27 +217,21 @@ function convert_time
 		fi;
 	done;
 
-	for ((i=0; i<${#output[@]}; i++));
-	do
-		if [ ${output[$i]} -gt 0 ] || [ ! -z "$time_string" ];
-		then
-			if [ ! -z "${time_string}" ];
-			then
+	for ((i=0; i<${#output[@]}; i++)); do
+		if [ ${output[$i]} -gt 0 ] || [ ! -z "$time_string" ]; then
+			if [ ! -z "${time_string}" ]; then
 				time_string=${time_string}" ";
 			fi;
 			time_string=${time_string}${output[$i]}${timenames[$i]};
 		fi;
 	done;
-	if [ ! -z ${ms} ];
-	then
-		if [ ${ms} -gt 0 ];
-		then
+	if [ ! -z ${ms} ]; then
+		if [ ${ms} -gt 0 ]; then
 			time_string=${time_string}" "${ms}"ms";
 		fi;
 	fi;
 	# just in case the time is 0
-	if [ -z "${time_string}" ];
-	then
+	if [ -z "${time_string}" ]; then
 		time_string="0s";
 	fi;
 	echo -n "${time_string}";
@@ -265,8 +240,7 @@ function convert_time
 # for the auto find, we need to get only the filename, and therefore remove all path info
 db_file=`basename $file`;
 # if file is set and exist, but no owner or database are given, use the file name data to get user & database
-if [ -r "$file" ] && ( [ ! "$owner" ] || [ ! "$database" ] || [ ! "$encoding" ] );
-then
+if [ -r "$file" ] && ( [ ! "$owner" ] || [ ! "$database" ] || [ ! "$encoding" ] ); then
 	# file name format is
 	# <database>.<owner>.<encoding>.<db type>-<version>_<host>_<port>_<date>_<time>_<sequence>
 	# we only are interested in the first two
@@ -279,59 +253,48 @@ then
 	__host=`echo $db_file | cut -d "." -f 5 | cut -d "_" -f 2`;
 	__port=`echo $db_file | cut -d "." -f 5 | cut -d "_" -f 3`;
 	# if any of those are not set, override by the file name settings
-	if [ ! "$owner" ];
-	then
+	if [ ! "$owner" ]; then
 		owner=$_owner;
 	fi;
-	if [ ! "$database" ];
-	then
+	if [ ! "$database" ]; then
 		database=$_database;
 	fi;
 	# port hast to be a valid number, at least 4 digits long and maximum 5 digits
-	if [ ! "$port" ] && [[ $__port =~ $PORT_REGEX ]] ;
-	then
+	if [ ! "$port" ] && [[ $__port =~ $PORT_REGEX ]] ; then
 		port='-p '$__port;
 		_port=$__port;
 	fi;
 	# unless it is local and no command line option is set, set the target connection host
-	if [ ! "$host" ] && [ "$__host" != "local" ];
-	then
+	if [ ! "$host" ] && [ "$__host" != "local" ]; then
 		host='-h '$__host;
 		_host=$__host;
 	fi;
-	if [ ! "$encoding" ];
-	then
-		if [ ! -z "$__encoding" ];
-		then
+	if [ ! "$encoding" ]; then
+		if [ ! -z "$__encoding" ]; then
 			encoding=$__encoding;
 		else
 			encoding=$_encoding;
 		fi;
 	fi;
-	if [ ! "$ident" ];
-	then
+	if [ ! "$ident" ]; then
 		ident=$_ident;
 	fi;
 fi;
 
 # if no user or database, exist
-if [ ! "$file" ] || [ ! -f "$file" ];
-then
+if [ ! "$file" ] || [ ! -f "$file" ]; then
 	echo "The file has not been set or the file given could not be found.";
 	exit 1;
 fi;
-if [ ! "$owner" ] || [ ! "$encoding" ] || [ ! "$database" ]
-then
+if [ ! "$owner" ] || [ ! "$encoding" ] || [ ! "$database" ] then
 	echo "The Owner, database name and encoding could not be set automatically, the have to be given as command line options.";
 	exit 1;
 fi;
 
-if [ "$REDHAT" -eq 1 ];
-then
+if [ "$REDHAT" -eq 1 ]; then
 	# Debian base path
 	PG_BASE_PATH='/usr/pgsql-';
-elif [ "$AMAZON" -eq 1 ];
-then
+elif [ "$AMAZON" -eq 1 ]; then
 	PG_BASE_PATH='/usr/lib64/pgsql';
 else
 	# Redhat base path (for non official ones would be '/usr/pgsql-'
@@ -339,20 +302,16 @@ else
 fi;
 
 # if no ident is given, try to find the default one, if not fall back to pre set one
-if [ ! -z "$ident" ];
-then
+if [ ! -z "$ident" ]; then
 	PG_PATH=$PG_BASE_PATH$ident'/bin/';
-	if [ ! -d "$PG_PATH" ];
-	then
+	if [ ! -d "$PG_PATH" ]; then
 		ident='';
 	fi;
 fi;
-if [ -z "$ident" ];
-then
+if [ -z "$ident" ]; then
 	# try to run psql from default path and get the version number
 	ident=$(pgv=$(pg_dump --version| grep "pg_dump" | cut -d " " -f 3); if [[ $(echo "${pgv}" | cut -d "." -f 1) -ge 10 ]]; then echo "${pgv}" | cut -d "." -f 1; else echo "${pgv}" | cut -d "." -f 1,2; fi);
-	if [ ! -z "$ident" ];
-	then
+	if [ ! -z "$ident" ]; then
 		PG_PATH=$PG_BASE_PATH$ident'/bin/';
 	else
 		# hard setting
@@ -371,8 +330,7 @@ LOG_FILE_EXT=$database.`date +"%Y%m%d_%H%M%S"`".log";
 echo "USING POSTGRESQL: $ident";
 
 # core abort if no core files found
-if [ ! -f $PG_PSQL ] || [ ! -f $PG_DROPDB ] || [ ! -f $PG_CREATEDB ] || [ ! -f $PG_RESTORE ];
-then
+if [ ! -f $PG_PSQL ] || [ ! -f $PG_DROPDB ] || [ ! -f $PG_CREATEDB ] || [ ! -f $PG_RESTORE ]; then
 	echo "One of the core binaries (psql, pg_dump, createdb, pg_restore) could not be found.";
 	echo "Search Path: ${PG_PATH}";
 	echo "Perhaps manual ident set with -i is necessary";
@@ -385,22 +343,19 @@ fi;
 output=`echo "SELECT version();" | $PG_PSQL -U postgres $host $port template1 -q -t -X -A -F "," 2>&1`;
 found=`echo "$output" | grep "PostgreSQL"`;
 # if the output does not have the PG version string, we have an error and abort
-if [ -z "$found" ];
-then
+if [ -z "$found" ]; then
 	echo "Cannot connect to the database: $output";
 	exit 1;
 fi;
 
 echo "Will drop database '$database' on host '$_host:$_port' and load file '$file' with user '$owner', set encoding '$encoding' and use database version '$ident'";
-if [ $NO_ASK -eq 1 ];
-then
+if [ $NO_ASK -eq 1 ]; then
 	go='yes';
 else
 	echo "Continue? type 'yes'";
 	read go;
 fi;
-if [ "$go" != 'yes' ];
-then
+if [ "$go" != 'yes' ]; then
 	echo "Aborted";
 	exit;
 else
@@ -408,26 +363,22 @@ else
 	START=`date +'%s'`;
 	echo "Drop DB $database [$_host:$_port] @ $start_time";
 	# DROP DATABASE
-	if [ $DRY_RUN -eq 0 ];
-	then
+	if [ $DRY_RUN -eq 0 ]; then
 		$PG_DROPDB -U postgres $host $port $database;
 	else
 		echo $PG_DROPDB -U postgres $host $port $database;
 	fi;
 	# CREATE DATABASE
 	echo "Create DB $database with $owner and encoding $encoding [$_host:$_port] @ `date +"%F %T"`";
-	if [ $DRY_RUN -eq 0 ];
-	then
+	if [ $DRY_RUN -eq 0 ]; then
 		$PG_CREATEDB -U postgres -O $owner -E $encoding -T $TEMPLATEDB $host $port $database;
 	else
 		echo $PG_CREATEDB -U postgres -O $owner -E $encoding -T $TEMPLATEDB $host $port $database;
 	fi;
 	# CREATE plpgsql LANG
-	if [ -f $PG_CREATELANG ];
-	then
+	if [ -f $PG_CREATELANG ]; then
 		echo "Create plpgsql lang in DB $database [$_host:$_port] @ `date +"%F %T"`";
-		if [ $DRY_RUN -eq 0 ];
-		then
+		if [ $DRY_RUN -eq 0 ]; then
 			$PG_CREATELANG -U postgres plpgsql $host $port $database;
 		else
 			echo $PG_CREATELANG -U postgres plpgsql $host $port $database;
@@ -435,16 +386,14 @@ else
 	fi;
 	# RESTORE DATA
 	echo "Restore data from $file to DB $database and $MAX_JOBS [$_host:$_port] @ `date +"%F %T"`";
-	if [ $DRY_RUN -eq 0 ];
-	then
+	if [ $DRY_RUN -eq 0 ]; then
 		$PG_RESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>restore_errors.$LOG_FILE_EXT;
 	else
 		echo $PG_RESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>restore_errors.$LOG_FILE_EXT;
 	fi;
 	# BUG FIX FOR POSTGRESQL 9.6.2 db_dump
 	# it does not dump the default public ACL so the owner of the DB cannot access the data, check if the ACL dump is missing and do a basic restore
-	if [ -z $($PG_RESTORE -l $file | grep -- "ACL - public postgres") ];
-	then
+	if [ -z $($PG_RESTORE -l $file | grep -- "ACL - public postgres") ]; then
 		echo "Fixing missing basic public schema ACLs from DB $database [$_host:$_port] @ `date +"%F %T"`";
 		# grant usage on schema public to public;
 		# grant create on schema public to public;
@@ -453,8 +402,7 @@ else
 	fi;
 	# SEQUENCE RESET DATA COLLECTION
 	echo "Resetting all sequences from DB $database [$_host:$_port] @ `date +"%F %T"`";
-	if [ $DRY_RUN -eq 0 ];
-	then
+	if [ $DRY_RUN -eq 0 ]; then
 		echo "SELECT 'SELECT SETVAL(' ||quote_literal(S.relname)|| ', MAX(' ||quote_ident(C.attname)|| ') ) FROM ' ||quote_ident(T.relname)|| ';' FROM pg_class AS S, pg_depend AS D, pg_class AS T, pg_attribute AS C WHERE S.relkind = 'S' AND S.oid = D.objid AND D.refobjid = T.oid AND D.refobjid = C.attrelid AND D.refobjsubid = C.attnum ORDER BY S.relname;" | $PG_PSQL -U $owner -Atq $host $port -o $TEMP_FILE $database
 		$PG_PSQL -U $owner $host $port -e -f $TEMP_FILE $database 1>output_sequence.$LOG_FILE_EXT 2>errors_sequence.$database.$LOG_FILE_EXT;
 		rm $TEMP_FILE;

@@ -1,6 +1,9 @@
 #!/bin/bash
 
 set -e -u -o pipefail
+# setup log before everything else
+LOG='/var/log/pg_db_dump_file.log';
+exec &>> ${LOG};
 
 # dumps all the databases in compressed (custom) format
 # EXCLUDE: space seperated list of database names to be skipped
@@ -38,11 +41,11 @@ GLOBALS=1; # if set to 0 will not dump globals
 KEEP=3; # in days, keeps KEEP+1 files, today + KEEP days before, or keep number of files if CLEAN_NUMBER is true
 CLEAN_NUMBER=0;
 BACKUPDIR='';
-DB_VERSION=;
+DB_VERSION='';
 DB_USER='';
 DB_PASSWD='';
 DB_HOST='';
-DB_PORT=;
+DB_PORT='';
 EXCLUDE=''; # space separated list of database names
 INCLUDE=''; # space seperated list of database names
 BC='/usr/bin/bc';
@@ -65,13 +68,10 @@ CONN_DB_HOST='';
 ERROR=0;
 
 # set options
-while getopts ":ctsgnk:b:i:d:e:u:h:p:l:ram" opt
-do
+while getopts ":ctsgnk:b:i:d:e:u:h:p:l:ram" opt; do
 	# pre test for unfilled
-	if [ "${opt}" = ":" ] || [[ "${OPTARG-}" =~ ${OPTARG_REGEX} ]];
-	then
-		if [ "${opt}" = ":" ];
-		then
+	if [ "${opt}" = ":" ] || [[ "${OPTARG-}" =~ ${OPTARG_REGEX} ]]; then
+		if [ "${opt}" = ":" ]; then
 			CHECK_OPT=${OPTARG};
 		else
 			CHECK_OPT=${opt};
@@ -136,52 +136,44 @@ do
 			CLEAN_NUMBER=1;
 			;;
 		b|backuppath)
-			if [ -z "${BACKUPDIR}" ];
-			then
+			if [ -z "${BACKUPDIR}" ]; then
 				BACKUPDIR=${OPTARG};
 			fi;
 			;;
 		i|ident)
-			if [ -z "${DB_VERSION}" ];
-			then
+			if [ -z "${DB_VERSION}" ]; then
 				DB_VERSION=${OPTARG};
 				SET_IDENT=1;
 			fi;
 			;;
 		u|user)
-			if [ -z "${DB_USER}" ];
-			then
+			if [ -z "${DB_USER}" ]; then
 				DB_USER=${OPTARG};
 			fi;
 			;;
 		h|hostname)
-			if [ -z "${DB_HOST}" ];
-			then
+			if [ -z "${DB_HOST}" ]; then
 				DB_HOST=${OPTARG};
 			fi;
 			;;
 		p|port)
-			if [ -z "${DB_PORT}" ];
-			then
+			if [ -z "${DB_PORT}" ]; then
 				DB_PORT=${OPTARG};
 			fi;
 			;;
 		l|login)
-			if [ -z "${DB_PASSWD}" ];
-			then
+			if [ -z "${DB_PASSWD}" ]; then
 				DB_PASSWD=${OPTARG};
 			fi;
 			;;
 		d|database)
-			if [ ! -z "${INCLUDE}" ];
-			then
+			if [ ! -z "${INCLUDE}" ]; then
 				INCLUDE=${INCLUDE}" ";
 			fi;
 			INCLUDE=${INCLUDE}${OPTARG};
 			;;
 		e|exclude)
-			if [ ! -z "${EXCLUDE}" ];
-			then
+			if [ ! -z "${EXCLUDE}" ]; then
 				EXCLUDE=${EXCLUDE}" ";
 			fi;
 			EXCLUDE=${EXCLUDE}${OPTARG};
@@ -207,38 +199,32 @@ do
 	esac;
 done;
 
-if [ ${ERROR} -eq 1 ];
-then
+if [ ${ERROR} -eq 1 ]; then
 	exit 0;
 fi;
 
-if [ "${REDHAT}" -eq 1 ] && [ "${AMAZON}" -eq 1 ];
-then
+if [ "${REDHAT}" -eq 1 ] && [ "${AMAZON}" -eq 1 ]; then
 	echo "You cannot set the -a and -r flag at the same time";
 	exit 0;
 fi;
 
 # set the defaults
-for name in BACKUPDIR DB_VERSION DB_USER DB_PASSWD DB_HOST DB_PORT EXCLUDE INCLUDE;
-do
+for name in BACKUPDIR DB_VERSION DB_USER DB_PASSWD DB_HOST DB_PORT EXCLUDE INCLUDE; do
 	# assign it to the real name if the real name is empty
-	if [ -z "${!name}" ];
-	then
+	if [ -z "${!name}" ]; then
 		# add the _ for the default name
 		default="_"${name};
 		eval ${name}=\${!default};
 	fi;
 done;
 # check DB port is valid number
-if ! [[ "${DB_PORT}" =~ ${PORT_REGEX} ]];
-then
+if ! [[ "${DB_PORT}" =~ ${PORT_REGEX} ]]; then
 	echo "The port needs to be a valid number: ${_port}";
 	exit 0;
 fi;
 
 # check if we have the 'bc' command available or not
-if [ -f "${BC}" ];
-then
+if [ -f "${BC}" ]; then
 	BC_OK=1;
 else
 	BC_OK=0;
@@ -246,19 +232,16 @@ fi;
 
 # if DB_HOST is set, we need to add -h to the command line
 # if nothing is set, DB_HOST is set to local so we know this is a "port" connection for later automatic restore
-if [ -z "${DB_HOST}" ];
-then
+if [ -z "${DB_HOST}" ]; then
 	DB_HOST='local';
 else
 	CONN_DB_HOST='-h '${DB_HOST};
 fi;
 
-if [ "${REDHAT}" -eq 1 ];
-then
+if [ "${REDHAT}" -eq 1 ]; then
 	# Redhat base path (for non official ones would be '/usr/pgsql-'
 	PG_BASE_PATH='/usr/pgsql-';
-elif [ "${AMAZON}" -eq 1 ];
-then
+elif [ "${AMAZON}" -eq 1 ]; then
 	PG_BASE_PATH='/usr/lib64/pgsql';
 else
 	# Debian base path
@@ -273,8 +256,7 @@ DB_TYPE='pgsql';
 db='';
 
 # core abort if no core files found
-if [ ! -f ${PG_PSQL} ] || [ ! -f ${PG_DUMP} ] || [ ! -f ${PG_DUMPALL} ];
-then
+if [ ! -f ${PG_PSQL} ] || [ ! -f ${PG_DUMP} ] || [ ! -f ${PG_DUMPALL} ]; then
 	echo "One of the core binaries (psql, pg_dump, pg_dumpall) could not be found.";
 	echo "Search Path: ${PG_PATH}";
 	echo "Perhaps manual ident set with -i is necessary";
@@ -282,39 +264,33 @@ then
 	exit 0;
 fi;
 
-if [ ! -d ${BACKUPDIR} ] ;
-then
-	if ! mkdir ${BACKUPDIR} ;
-	then
+if [ ! -d ${BACKUPDIR} ] ; then
+	if ! mkdir ${BACKUPDIR} ; then
 		echo "Cannot create backup directory: ${BACKUPDIR}"
 		exit 0;
 	fi
 fi
 # check if we can write into that folder
 touch ${BACKUPDIR}/tmpfile || echo "[!] touch failed";
-if [ ! -f ${BACKUPDIR}/tmpfile ];
-then
+if [ ! -f ${BACKUPDIR}/tmpfile ]; then
 	echo "Cannot write to ${BACKUPDIR}";
 	exit 0;
 else
 	rm -f ${BACKUPDIR}/tmpfile;
 fi;
 # if backupdir is "." rewrite to pwd
-if [ "${BACKUPDIR}" == '.' ];
-then
+if [ "${BACKUPDIR}" == '.' ]; then
 	BACKUPDIR=$(pwd);
 fi;
 # check if we can connect to template1 table, if not we abort here
 connect=$(${PG_PSQL} -U "${DB_USER}" ${CONN_DB_HOST} -p ${DB_PORT} -d template1 -t -A -F "," -X -q -c "SELECT datname FROM pg_catalog.pg_database WHERE datname = 'template1';") || echo "[!] pgsql connect error";
-if [ "${connect}" != "template1" ];
-then
+if [ "${connect}" != "template1" ]; then
 	echo "Failed to connect to template1 with user '${DB_USER}' at host '${DB_HOST}' on port '${DB_PORT}'";
 	exit 0;
 fi;
 
 # if we have an ident override set, set a different DUMP VERSION here than the automatic one
-if [ "${SET_IDENT}" -eq 1 ];
-then
+if [ "${SET_IDENT}" -eq 1 ]; then
 	DUMP_DB_VERSION=$(pgv=$(${PG_PATH}/pg_dump --version| grep "pg_dump" | cut -d " " -f 3); if [[ $(echo "${pgv}" | cut -d "." -f 1) -ge 10 ]]; then echo "${pgv}" | cut -d "." -f 1; else echo "${pgv}" | cut -d "." -f 1,2; fi);
 else
 	DUMP_DB_VERSION=${DB_VERSION};
@@ -341,12 +317,10 @@ function convert_time
 	timegroups=(86400 3600 60 1); # day, hour, min, sec
 	timenames=("d" "h" "m" "s"); # day, hour, min, sec
 	output=( );
-	time_string=;
-	for timeslice in ${timegroups[@]};
-	do
+	time_string='';
+	for timeslice in ${timegroups[@]}; do
 		# floor for the division, push to output
-		if [ ${BC_OK} -eq 1 ];
-		then
+		if [ ${BC_OK} -eq 1 ]; then
 			output[${#output[*]}]=$(echo "${timestamp}/${timeslice}" | bc);
 			timestamp=$(echo "${timestamp}%${timeslice}" | bc);
 		else
@@ -355,27 +329,21 @@ function convert_time
 		fi;
 	done;
 
-	for ((i=0; i<${#output[@]}; i++));
-	do
-		if [ ${output[$i]} -gt 0 ] || [ ! -z "$time_string" ];
-		then
-			if [ ! -z "${time_string}" ];
-			then
+	for ((i=0; i<${#output[@]}; i++)); do
+		if [ ${output[$i]} -gt 0 ] || [ ! -z "$time_string" ]; then
+			if [ ! -z "${time_string}" ]; then
 				time_string=${time_string}" ";
 			fi;
 			time_string=${time_string}${output[$i]}${timenames[$i]};
 		fi;
 	done;
-	if [ ! -z ${ms} ];
-	then
-		if [ ${ms} -gt 0 ];
-		then
+	if [ ! -z ${ms} ]; then
+		if [ ${ms} -gt 0 ]; then
 			time_string=${time_string}" "${ms}"ms";
 		fi;
 	fi;
 	# just in case the time is 0
-	if [ -z "${time_string}" ];
-	then
+	if [ -z "${time_string}" ]; then
 		time_string="0s";
 	fi;
 	echo -n "${time_string}";
@@ -410,8 +378,7 @@ function get_dump_file_name
 {
 	# set base search for the files
 	sequence=*;
-	if [ ${db} ];
-	then
+	if [ ${db} ]; then
 		db_name=${db}"."${owner}"."${encoding}".";
 	else
 		db_name="pg_globals."${DB_USER}".NONE.";
@@ -419,17 +386,14 @@ function get_dump_file_name
 	file=${BACKUPDIR}"/"${db_name}${DB_TYPE}"-"${DUMP_DB_VERSION}"_"${DB_HOST}"_"${DB_PORT}"_"$(date +%Y%m%d)"_"$(date +%H%M)"_"${sequence}".c.sql";
 	seq='';
 	# we need to find the next sequence number
-	for i in $(ls -1 ${file} 2>/dev/null);
-	do
+	for i in $(ls -1 ${file} 2>/dev/null); do
 		# get the last sequence and cut any leading 0 so we can run +1 on it
 		seq=$(echo $i | cut -d "." -f 3 | cut -d "_" -f 4 | sed -e "s/^0//g");
 	done;
-	if [ ${seq} ];
-	then
+	if [ ${seq} ]; then
 		# add +1 and if < 10 prefix with 0
 		let seq=${seq}+1;
-		if [ ${seq} -lt 10 ];
-		then
+		if [ ${seq} -lt 10 ]; then
 			sequence="0"${seq};
 		else
 			sequence=${seq};
@@ -451,37 +415,29 @@ function get_dump_file_name
 function get_dump_databases
 {
 	search_names=();
-	if [ ${GLOBALS} -eq 1 ];
-	then
+	if [ ${GLOBALS} -eq 1 ]; then
 		search_names+=("pg_globals.*");
 	fi;
-	for owner_db in $(${PG_PSQL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -d template1 -t -A -F "," -X -q -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname, pg_catalog.pg_encoding_to_char(encoding) FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)';")
-	do
+	for owner_db in $(${PG_PSQL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -d template1 -t -A -F "," -X -q -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname, pg_catalog.pg_encoding_to_char(encoding) FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)';") do
 		db=$(echo ${owner_db} | cut -d "," -f 2);
 		# check if we exclude this db
 		exclude=0;
 		include=0;
-		for excl_db in ${EXCLUDE};
-		do
-			if [ "${db}" = "${excl_db}" ];
-			then
+		for excl_db in ${EXCLUDE}; do
+			if [ "${db}" = "${excl_db}" ]; then
 				exclude=1;
 			fi;
 		done;
-		if [ ! -z "${INCLUDE}" ];
-		then
-			for incl_db in ${INCLUDE};
-			do
-				if [ "${db}" = "${incl_db}" ];
-				then
+		if [ ! -z "${INCLUDE}" ]; then
+			for incl_db in ${INCLUDE}; do
+				if [ "${db}" = "${incl_db}" ]; then
 					include=1;
 				fi;
 			done;
 		else
 			include=1;
 		fi;
-		if [ ${exclude} -eq 0 ] && [ ${include} -eq 1 ];
-		then
+		if [ ${exclude} -eq 0 ] && [ ${include} -eq 1 ]; then
 			search_names+=("${db}.*");
 		fi;
 	done;
@@ -494,10 +450,8 @@ function get_dump_databases
 # DESC  : checks for older files than given keep time/amount and removes them
 function clean_up
 {
-	if [ -d ${BACKUPDIR} ];
-	then
-		if [ ${CLEAN_NUMBER} -eq 0 ];
-		then
+	if [ -d ${BACKUPDIR} ]; then
+		if [ ${CLEAN_NUMBER} -eq 0 ]; then
 			echo "Cleanup older than ${KEEP} days backup in ${BACKUPDIR}";
 		else
 			echo "Cleanup up, keep only ${KEEP} backups in ${BACKUPDIR}";
@@ -506,14 +460,11 @@ function clean_up
 		fi;
 		# build the find string based on the search names patter
 		find_string='';
-		for name in "${search_names[@]}";
-		do
+		for name in "${search_names[@]}"; do
 			# for not number based, we build the find string here
 			# else we do the delete here already
-			if [ ${CLEAN_NUMBER} -eq 0 ];
-			then
-				if [ ! -z "${find_string}" ];
-				then
+			if [ ${CLEAN_NUMBER} -eq 0 ]; then
+				if [ ! -z "${find_string}" ]; then
 					find_string=${find_string}' -o ';
 				fi;
 				find_string=${find_string}"-mtime +${KEEP} -name "${name}${DB_TYPE}*.sql" -type f -delete -print";
@@ -522,19 +473,16 @@ function clean_up
 				# if we do number based delete of old data, but only if the number of files is bigger than the keep number or equal if we do PRE_RUN_CLEAN_UP
 				# this can be error, but we allow it -> script should not abort here
 				count=$(ls ${BACKUPDIR}"/"${name}${DB_TYPE}*.sql | wc -l) || true;
-				if [ ${PRE_RUN_CLEAN_UP} -eq 1 ]
-				then
+				if [ ${PRE_RUN_CLEAN_UP} -eq 1 ] then
 					let count=${count}+1;
 				fi;
-				if [ ${count} -gt ${KEEP} ];
-				then
+				if [ ${count} -gt ${KEEP} ]; then
 					# calculate the amount to delete
 					# eg if we want to keep 1, and we have 3 files then we need to delete 2
 					# keep is always +1 (include the to backup count). count is +1 if we do a pre-run cleanup
 					let TO_DELETE=${count}-${KEEP};
 					echo "- Remove old backups for '${name}', found ${count}, will delete ${TO_DELETE}";
-					if [ ${TEST} -eq 0 ];
-					then
+					if [ ${TEST} -eq 0 ]; then
 						ls -tr ${BACKUPDIR}/${name}${DB_TYPE}*.sql|head -n ${TO_DELETE}|xargs rm;
 					else
 						echo "ls -tr ${BACKUPDIR}/${name}${DB_TYPE}*.sql|head -n ${TO_DELETE}|xargs rm";
@@ -543,10 +491,8 @@ function clean_up
 			fi;
 		done;
 		# if we do find (day based) delete of old data
-		if [ ${CLEAN_NUMBER} -eq 0 ];
-		then
-			if [ ${TEST} -eq 0 ];
-			then
+		if [ ${CLEAN_NUMBER} -eq 0 ]; then
+			if [ ${TEST} -eq 0 ]; then
 				find ${BACKUPDIR} ${find_string};
 			else
 				echo "find ${BACKUPDIR} ${find_string}";
@@ -555,17 +501,16 @@ function clean_up
 	fi
 }
 
-if [ ! -z "${DB_PASSWD}" ];
-then
+if [ ! -z "${DB_PASSWD}" ]; then
 	export PGPASSWORD=${DB_PASSWD};
 fi;
 START=$(date "+%s");
+echo "=======================================================================>";
 printf "Starting at %s\n" "$(date '+%Y-%m-%d %H:%M:%S')";
 echo "Target dump directory is: ${BACKUPDIR}";
 echo "Keep ${KEEP} backups";
 # if flag is set, do pre run clean up
-if [ ${PRE_RUN_CLEAN_UP} -eq 1 ];
-then
+if [ ${PRE_RUN_CLEAN_UP} -eq 1 ]; then
 	get_dump_databases;
 	clean_up;
 fi;
@@ -573,15 +518,13 @@ echo "Backing up databases:";
 # reset search name list for actual dump
 search_names=();
 # dump globals
-if [ ${GLOBALS} -eq 1 ];
-then
+if [ ${GLOBALS} -eq 1 ]; then
 	echo -e -n "+ Dumping globals ... "
 	# reset any previous set db name from deletes so the correct global file name is set
 	db='';
 	filename=$(get_dump_file_name);
 	search_names+=("pg_globals.*"); # this is used for the find/delete part
-	if [ ${TEST} -eq 0 ];
-	then
+	if [ ${TEST} -eq 0 ]; then
 		${PG_DUMPALL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} --globals-only > "${filename}";
 	else
 		echo "${PG_DUMPALL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} --globals-only > ${filename}";
@@ -592,23 +535,20 @@ else
 fi;
 
 echo -n "(+) Dump databases: ";
-if [ -z "${INCLUDE}" ];
-then
+if [ -z "${INCLUDE}" ]; then
 	echo "All";
 else
 	echo ${INCLUDE};
 fi;
 echo -n "(-) Exclude databases: ";
-if [ -z "${EXCLUDE}" ];
-then
+if [ -z "${EXCLUDE}" ]; then
 	echo "None";
 else
 	echo ${EXCLUDE};
 fi;
 
 filesize_sum=0;
-for owner_db in $(${PG_PSQL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -d template1 -t -A -F "," -X -q -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname, pg_catalog.pg_encoding_to_char(encoding) AS encoding FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)' ORDER BY datname;")
-do
+for owner_db in $(${PG_PSQL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -d template1 -t -A -F "," -X -q -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname, pg_catalog.pg_encoding_to_char(encoding) AS encoding FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)' ORDER BY datname;") do
 	# get the user who owns the DB too
 	owner=$(echo ${owner_db} | cut -d "," -f 1);
 	db=$(echo ${owner_db} | cut -d "," -f 2);
@@ -616,62 +556,52 @@ do
 	# check if we exclude this db
 	exclude=0;
 	include=0;
-	for excl_db in ${EXCLUDE};
-	do
-		if [ "${db}" = "${excl_db}" ];
-		then
+	for excl_db in ${EXCLUDE};z do
+		if [ "${db}" = "${excl_db}" ]; then
 			exclude=1;
 		fi;
 	done;
-	if [ ! -z "${INCLUDE}" ];
-	then
-		for incl_db in ${INCLUDE};
-		do
-			if [ "${db}" = "${incl_db}" ];
-			then
+	if [ ! -z "${INCLUDE}" ]; then
+		for incl_db in ${INCLUDE}; do
+			if [ "${db}" = "${incl_db}" ]; then
 				include=1;
 			fi;
 		done;
 	else
 		include=1;
 	fi;
-	if [ ${exclude} -eq 0 ] && [ ${include} -eq 1 ];
-	then
+	if [ ${exclude} -eq 0 ] && [ ${include} -eq 1 ]; then
 		printf "+ Dumping database: %35s ... " "${db}";
 		filename=$(get_dump_file_name);
 		search_names+=("${db}.*");
 		SUBSTART=$(date "+%s");
-		if [ ${TEST} -eq 0 ];
-		then
+		if [ ${TEST} -eq 0 ]; then
 			${PG_DUMP} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -c --format=c ${db} > "${filename}";
 		else
 			echo "${PG_DUMP} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -c --format=c ${db} > ${filename}";
 		fi;
 		# get the file size for the dumped file and convert it to a human readable format
 		filesize=0;
-		if [ -f "${filename}" ];
-		then
+		if [ -f "${filename}" ]; then
 			filesize=$(wc -c "${filename}" | cut -f 1 -d ' ');
-			filesize_sum=$[ $filesize+$filesize_sum ];
+			filesize_sum=$[$filesize+$filesize_sum];
 		fi;
-		DURATION=$[ $(date "+%s")-${SUBSTART} ];
+		DURATION=$[$(date "+%s")-${SUBSTART}];
 		printf "done (%s and %s)\n" "$(convert_time ${DURATION})" "$(convert_bytes ${filesize})";
 	else
 		printf -- "- Exclude database: %35s\n" "${db}";
 	fi;
 done
 printf "Backup ended at %s\n" "$(date '+%Y-%m-%d %H:%M:%S')";
-if [ ! -z "${DB_PASSWD}" ];
-then
+if [ ! -z "${DB_PASSWD}" ]; then
 	unset DB_PASSWD;
 fi;
 
-if [ ${PRE_RUN_CLEAN_UP} -eq 0 ];
-then
+if [ ${PRE_RUN_CLEAN_UP} -eq 0 ]; then
 	clean_up;
 fi;
 
-DURATION=$[ $(date "+%s")-${START} ];
+DURATION=$[$(date "+%s")-${START}];
 printf "Cleanup ended at %s\n" "$(date '+%Y-%m-%d %H:%M:%S')";
 printf "Finished backup in %s with %s\n" "$(convert_time ${DURATION})" "$(convert_bytes ${filesize_sum})";
 

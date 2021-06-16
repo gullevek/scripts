@@ -36,13 +36,10 @@ PORT_REGEX="^[0-9]{4,5}$";
 OPTARG_REGEX="^-";
 DRY_RUN=0;
 # options check
-while getopts ":f:j:h:p:e:granm" opt
-do
+while getopts ":f:j:h:p:e:granm" opt; do
 	# pre test for unfilled
-	if [ "${opt}" = ":" ] || [[ "${OPTARG-}" =~ ${OPTARG_REGEX} ]];
-	then
-		if [ "${opt}" = ":" ];
-		then
+	if [ "${opt}" = ":" ] || [[ "${OPTARG-}" =~ ${OPTARG_REGEX} ]]; then
+		if [ "${opt}" = ":" ]; then
 			CHECK_OPT=${OPTARG};
 		else
 			CHECK_OPT=${opt};
@@ -78,22 +75,19 @@ do
 			MAX_JOBS=${OPTARG};
 			;;
 		e|encoding)
-			if [ -z "$encoding" ];
-			then
+			if [ -z "$encoding" ]; then
 				encoding=$OPTARG;
 			fi;
 			;;
 		h|hostname)
-			if [ -z "$host" ];
-			then
+			if [ -z "$host" ]; then
 				host='-h '$OPTARG;
 				_host=$OPTARG;
 				HOST=$OPRTARG;
 			fi;
 			;;
 		p|port)
-			if [ -z "$port" ];
-			then
+			if [ -z "$port" ]; then
 				port='-p '$OPTARG;
 				_port=$OPTARG;
 				PORT=$OPTARG;
@@ -123,17 +117,14 @@ do
 	esac;
 done;
 
-if [ "$REDHAT" -eq 1 ] && [ "$AMAZON" -eq 1 ];
-then
+if [ "$REDHAT" -eq 1 ] && [ "$AMAZON" -eq 1 ]; then
 	echo "You cannot set the -a and -r flag at the same time";
 fi;
 
-if [ "$REDHAT" -eq 1 ];
-then
+if [ "$REDHAT" -eq 1 ]; then
 	# Redhat base path (for non official ones would be '/usr/pgsql-'
 	DBPATH_BASE='/usr/pgsql-'
-elif [ "$AMAZON" -eq 1 ];
-then
+elif [ "$AMAZON" -eq 1 ]; then
 	# Amazon paths (lib64 default amazon package)
 	DBPATH_BASE='/usr/lib64/pgsql';
 else
@@ -142,8 +133,7 @@ else
 fi;
 
 # check that the port is a valid number
-if ! [[ "$_port" =~ $PORT_REGEX ]];
-then
+if ! [[ "$_port" =~ $PORT_REGEX ]]; then
 	echo "The port needs to be a valid number: $_port";
 	exit 1;
 fi;
@@ -156,16 +146,13 @@ NUMBER_REGEX="^[0-9]{1,}$";
 cpu=$(cat /proc/cpuinfo | grep "processor" | wc -l);
 _max_jobs=$[ ${cpu##*: }+1 ]
 # if the MAX_JOBS is not number or smaller 1 or greate _max_jobs
-if [ ! -z "${MAX_JOBS}" ];
-then
+if [ ! -z "${MAX_JOBS}" ]; then
 	# check that it is a valid number
-	if [[ ! "$MAX_JOBS" =~ "$NUMBER_REGEX" ]];
-	then
+	if [[ ! "$MAX_JOBS" =~ "$NUMBER_REGEX" ]]; then
 		echo "Please enter a number for the -j option";
 		exit 1;
 	fi;
-	if [ "${MAX_JOBS}" -lt 1 ] || [ "${MAX_JOBS}" -gt 1 ];
-	then
+	if [ "${MAX_JOBS}" -lt 1 ] || [ "${MAX_JOBS}" -gt 1 ]; then
 		echo "The value for the jobs option -j cannot be smaller than 1 or bigger than ${_max_jobs}";
 		exit 1;
 	fi;
@@ -174,35 +161,30 @@ else
 	MAX_JOBS=${_max_jobs};
 fi;
 
-if [ "$DUMP_FOLDER" = '' ];
-then
+if [ "$DUMP_FOLDER" = '' ]; then
 	echo "Please provide a source folder for the dump files with the -f option";
 	exit;
 fi;
 
 # check that source folder is there
-if [ ! -d "$DUMP_FOLDER" ];
-then
+if [ ! -d "$DUMP_FOLDER" ]; then
 	echo "Folder '$DUMP_FOLDER' does not exist";
 	exit;
 fi;
 
 LOGS=$DUMP_FOLDER'/logs/';
 # create logs folder if missing
-if [ ! -d "$LOGS" ];
-then
+if [ ! -d "$LOGS" ]; then
 	echo "Creating '$LOGS' folder";
 	mkdir -p "$LOGS";
-	if [ ! -d "$LOGS" ];
-	then
+	if [ ! -d "$LOGS" ]; then
 		echo "Creation of '$LOGS' folder failed";
 		exit;
 	fi;
 fi;
 
 # check if we have the 'bc' command available or not
-if [ -f "${BC}" ];
-then
+if [ -f "${BC}" ]; then
 	BC_OK=1;
 else
 	BC_OK=0;
@@ -225,12 +207,10 @@ function convert_time
 	timegroups=(86400 3600 60 1); # day, hour, min, sec
 	timenames=("d" "h" "m" "s"); # day, hour, min, sec
 	output=( );
-	time_string=;
-	for timeslice in ${timegroups[@]};
-	do
+	time_string='';
+	for timeslice in ${timegroups[@]}; do
 		# floor for the division, push to output
-		if [ ${BC_OK} -eq 1 ];
-		then
+		if [ ${BC_OK} -eq 1 ]; then
 			output[${#output[*]}]=$(echo "${timestamp}/${timeslice}" | bc);
 			timestamp=$(echo "${timestamp}%${timeslice}" | bc);
 		else
@@ -239,27 +219,21 @@ function convert_time
 		fi;
 	done;
 
-	for ((i=0; i<${#output[@]}; i++));
-	do
-		if [ ${output[$i]} -gt 0 ] || [ ! -z "$time_string" ];
-		then
-			if [ ! -z "${time_string}" ];
-			then
+	for ((i=0; i<${#output[@]}; i++)); do
+		if [ ${output[$i]} -gt 0 ] || [ ! -z "$time_string" ]; then
+			if [ ! -z "${time_string}" ]; then
 				time_string=${time_string}" ";
 			fi;
 			time_string=${time_string}${output[$i]}${timenames[$i]};
 		fi;
 	done;
-	if [ ! -z ${ms} ];
-	then
-		if [ ${ms} -gt 0 ];
-		then
+	if [ ! -z ${ms} ]; then
+		if [ ${ms} -gt 0 ]; then
 			time_string=${time_string}" "${ms}"ms";
 		fi;
 	fi;
 	# just in case the time is 0
-	if [ -z "${time_string}" ];
-	then
+	if [ -z "${time_string}" ]; then
 		time_string="0s";
 	fi;
 	echo -n "${time_string}";
@@ -268,8 +242,7 @@ function convert_time
 # default version (for folder)
 DBPATH_VERSION='9.6/';
 # if amazon remove "." from version
-if [ "${AMAZON}" -eq 1 ];
-then
+if [ "${AMAZON}" -eq 1 ]; then
 	DBPATH_VERSION=$(echo "${DBPATH_VERSION}" | sed -e 's/\.//');
 fi;
 DBPATH_BIN='bin/';
@@ -287,9 +260,21 @@ LOGFILE="tee -a $LOGS/PG_RESTORE_DB_FILE.`date +"%Y%m%d_%H%M%S"`.log";
 # get the count for DBs to import
 db_count=`find $DUMP_FOLDER -name "*.sql" -print | wc -l`;
 # start info
-if [ "${DUMP_FOLDER}" = "." ]; then _DUMP_FOLDER="[current folder]"; else _DUMP_FOLDER=${DUMP_FOLDER}; fi;
-if [ -z "${HOST}" ]; then _HOST="[auto host]"; else _HOST=${HOST}; fi;
-if [ -z "${PORT}" ]; then _PORT="[auto port]"; else _PORT=${PORT}; fi;
+if [ "${DUMP_FOLDER}" = "." ]; then
+	_DUMP_FOLDER="[current folder]";
+else
+	_DUMP_FOLDER=${DUMP_FOLDER};
+fi;
+if [ -z "${HOST}" ]; then
+	_HOST="[auto host]";
+else
+	_HOST=${HOST};
+fi;
+if [ -z "${PORT}" ]; then
+	_PORT="[auto port]";
+else
+	_PORT=${PORT};
+fi;
 echo "= Will import $db_count databases from $_DUMP_FOLDER" | $LOGFILE;
 echo "= into the DB server $_HOST:$_PORT" | $LOGFILE;
 echo "= running $MAX_JOBS jobs" | $LOGFILE;
@@ -300,8 +285,7 @@ pos=1;
 MASTERSTART=`date +'%s'`;
 master_start_time=`date +"%F %T"`;
 # first import the pg_globals file if this is requested, default is yes
-if [ "$IMPORT_GLOBALS" -eq 1 ];
-then
+if [ "$IMPORT_GLOBALS" -eq 1 ]; then
 	start_time=`date +"%F %T"`;
 	START=`date +'%s'`;
 	# get the pg_globals file
@@ -312,39 +296,33 @@ then
 	# the last _ is for version 10 or higher
 	version=`echo $filename | cut -d "." -f 4 | cut -d "-" -f 2 | cut -d "_" -f 1`; # db version, without prefix of DB type
 	# if this is < 10 then we need the second part too
-	if [ ${version} -lt 10 ];
-	then
+	if [ ${version} -lt 10 ]; then
 		version=$version'.'`echo $filename | cut -d "." -f 5 | cut -d "_" -f 1`; # db version, second part (after .)
 	fi;
 	# if amazon remove "." from version
-	if [ "${AMAZON}" -eq 1 ];
-	then
+	if [ "${AMAZON}" -eq 1 ]; then
 		version=$(echo "${version}" | sed -e 's/\.//');
 	fi;
 	__host=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 2`; # hostname of original DB, can be used as target host too
 	__port=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 3`; # port of original DB, can be used as target port too
 	# override file port over given port if it differs and is valid
-	if [ -z $_port ] && [ "$__port" != $_port ] && [[ $__port =~ $PORT_REGEX ]] ;
-	then
+	if [ -z $_port ] && [ "$__port" != $_port ] && [[ $__port =~ $PORT_REGEX ]] ; then
 		_port=$__port;
 		port='-p '$_port;
 	fi;
-	if [ -z "$_host" ] && [ "$__host" != "local" ];
-	then
+	if [ -z "$_host" ] && [ "$__host" != "local" ]; then
 		_host=$__host;
 		host='-h '$_host;
 	fi;
 	# create the path to the DB from the DB version in the backup file
-	if [ ! -z "$version" ];
-	then
+	if [ ! -z "$version" ]; then
 		DBPATH_VERSION_LOCAL=$version'/';
 	else
 		DBPATH_VERSION_LOCAL=$DBPATH_VERSION;
 	fi;
 	DBPATH=$DBPATH_BASE$DBPATH_VERSION_LOCAL$DBPATH_BIN;
 	echo "+ Restore globals file: $filename to [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
-	if [ ${DRY_RUN} -eq 0 ];
-	then
+	if [ ${DRY_RUN} -eq 0 ]; then
 		$DBPATH$PSQL -U postgres $host $port -f $file -e -q -X template1 | $LOGFILE;
 	else
 		echo "$DBPATH$PSQL -U postgres $host $port -f $file -e -q -X template1" | $LOGFILE;
@@ -352,8 +330,7 @@ then
 	DURATION=$[ `date +'%s'`-$START ];
 	printf "=[Globals Restore]=END===[%s seconds]========================================================>\n" $(convert_time ${DURATION}) | $LOGFILE;
 fi;
-for file in $DUMP_FOLDER/*.sql;
-do
+for file in $DUMP_FOLDER/*.sql; do
 	start_time=`date +"%F %T"`;
 	START=`date +'%s'`;
 	echo "=[$pos/$db_count]=START=[$start_time]==================================================>" | $LOGFILE;
@@ -369,48 +346,40 @@ do
 	# the last _ part if for version 10
 	version=`echo $filename | cut -d "." -f 4 | cut -d "-" -f 2 | cut -d "_" -f 1`; # db version, without prefix of DB type
 	# if this is < 10 then we need the second part too
-	if [ ${version} -lt 10 ];
-	then
+	if [ ${version} -lt 10 ]; then
 		version=$version'.'`echo $filename | cut -d "." -f 5 | cut -d "_" -f 1`; # db version, second part (after .)
 	fi;
 	# if amazon remove "." from version
-	if [ "${AMAZON}" -eq 1 ];
-	then
+	if [ "${AMAZON}" -eq 1 ]; then
 		version=$(echo "${version}" | sed -e 's/\.//');
 	fi;
 	__host=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 2`; # hostname of original DB, can be used as target host too
 	__port=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 3`; # port of original DB, can be used as target port too
 	other=`echo $filename | cut -d "." -f 5 | cut -d "_" -f 2-`; # backup date and time, plus sequence
 	# override file port over given port if it differs and is valid
-	if [ -z $_port ] && [ "$__port" != $_port ] && [[ $__port =~ $PORT_REGEX ]] ;
-	then
+	if [ -z $_port ] && [ "$__port" != $_port ] && [[ $__port =~ $PORT_REGEX ]] ; then
 		_port=$__port;
 		port='-p '$_port;
 	fi;
-	if [ -z "$_host" ] && [ "$__host" != "local" ];
-	then
+	if [ -z "$_host" ] && [ "$__host" != "local" ]; then
 		_host=$__host;
 		host='-h '$_host;
 	fi;
 	# override encoding (dangerous)
 	# check if we have a master override
-	if [ ! "$encoding" ]
-	then
+	if [ ! "$encoding" ] then
 		set_encoding=$encoding;
 	fi;
 	# if no override encoding set first from file, then from global
-	if [ ! "$set_encoding" ];
-	then
-		if [ ! -z "$__encoding" ];
-		then
+	if [ ! "$set_encoding" ]; then
+		if [ ! -z "$__encoding" ]; then
 			set_encoding=$__encoding;
 		else
 			set_encoding=$_encoding;
 		fi;
 	fi;
 	# create the path to the DB from the DB version in the backup file
-	if [ ! -z "$version" ];
-	then
+	if [ ! -z "$version" ]; then
 		DBPATH_VERSION_LOCAL=$version'/';
 	else
 		DBPATH_VERSION_LOCAL=$DBPATH_VERSION;
@@ -418,23 +387,18 @@ do
 	DBPATH=$DBPATH_BASE$DBPATH_VERSION_LOCAL$DBPATH_BIN;
 	# check this is skip or not
 	exclude=0;
-	for exclude_db in $EXCLUDE_LIST;
-	do
-		if [ "$exclude_db" = "$database" ];
-		then
+	for exclude_db in $EXCLUDE_LIST; do
+		if [ "$exclude_db" = "$database" ]; then
 			exclude=1;
 		fi;
 	done;
-	if [ $exclude -eq 0 ];
-	then
+	if [ $exclude -eq 0 ]; then
 		# create user if not exist yet
 		# check query for user
 		user_oid=`echo "SELECT oid FROM pg_roles WHERE rolname = '$owner';" | $PSQL -U postgres $host $port -A -F "," -t -q -X template1`;
-		if [ -z $user_oid ];
-		then
+		if [ -z $user_oid ]; then
 			echo "+ Create USER '$owner' for DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
-			if [ ${DRY_RUN} -eq 0 ];
-			then
+			if [ ${DRY_RUN} -eq 0 ]; then
 				$CREATEUSER -U postgres -D -R -S $host $port $owner;
 			else
 				echo "$CREATEUSER -U postgres -D -R -S $host $port $owner";
@@ -442,40 +406,34 @@ do
 		fi;
 		# before importing the data, drop this database
 		echo "- Drop DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
-		if [ ${DRY_RUN} -eq 0 ];
-		then
+		if [ ${DRY_RUN} -eq 0 ]; then
 			$DBPATH$DROPDB -U postgres $host $port $database;
 		else
 			echo "$DBPATH$DROPDB -U postgres $host $port $database";
 		fi;
 		echo "+ Create DB '$database' with '$owner' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
-		if [ ${DRY_RUN} -eq 0 ];
-		then
+		if [ ${DRY_RUN} -eq 0 ]; then
 			$DBPATH$CREATEDB -U postgres -O $owner -E $set_encoding -T $TEMPLATEDB $host $port $database;
 		else
 			echo "$DBPATH$CREATEDB -U postgres -O $owner -E $set_encoding -T $TEMPLATEDB $host $port $database";
 		fi;
-		if [ -f $DBPATH$CREATELANG ];
-		then
+		if [ -f $DBPATH$CREATELANG ]; then
 			echo "+ Create plpgsql lang in DB '$database' [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
-			if [ ${DRY_RUN} -eq 0 ];
-			then
+			if [ ${DRY_RUN} -eq 0 ]; then
 				$DBPATH$CREATELANG -U postgres plpgsql $host $port $database;
 			else
 				echo "$DBPATH$CREATELANG -U postgres plpgsql $host $port $database";
 			fi;
 		fi;
 		echo "% Restore data from '$filename' to DB '$database' using $MAX_JOBS jobs [$_host:$_port] @ `date +"%F %T"`" | $LOGFILE;
-		if [ ${DRY_RUN} -eq 0 ];
-		then
+		if [ ${DRY_RUN} -eq 0 ]; then
 			$DBPATH$PGRESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>$LOGS'/errors.'$database'.'$(date +"%Y%m%d_%H%M%S".log);
 		else
 			echo "$DBPATH$PGRESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>$LOGS'/errors.'$database'.'$(date +"%Y%m%d_%H%M%S".log)";
 		fi;
 		# BUG FIX FOR POSTGRESQL 9.6.2 db_dump
 		# it does not dump the default public ACL so the owner of the DB cannot access the data, check if the ACL dump is missing and do a basic restore
-		if [ -z "$($DBPATH$PGRESTORE -l $file | grep -- "ACL - public postgres")" ];
-		then
+		if [ -z "$($DBPATH$PGRESTORE -l $file | grep -- "ACL - public postgres")" ]; then
 			echo "? Fixing missing basic public schema ACLs from DB $database [$_host:$_port] @ `date +"%F %T"`";
 			# grant usage on schema public to public;
 			# grant create on schema public to public;

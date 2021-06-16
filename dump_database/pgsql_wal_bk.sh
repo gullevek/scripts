@@ -73,18 +73,15 @@ BASE_FOLDER='postgres';
 # general error check var
 error=0;
 
-while getopts ":s:t:m:i:x:ch" opt
-do
+while getopts ":s:t:m:i:x:ch" opt; do
 	case ${opt} in
 		s|source)
-			if [ -z "${source_p}" ];
-			then
+			if [ -z "${source_p}" ]; then
 				source_p=${OPTARG};
 			fi;
 			;;
 		t|target)
-			if [ -z "${target_f}" ];
-			then
+			if [ -z "${target_f}" ]; then
 				target_f=${OPTARG};
 			fi;
 			;;
@@ -92,20 +89,17 @@ do
 			BASE_FOLDER='pgsql';
 			;;
 		m|move)
-			if [ -z "${move}" ];
-			then
+			if [ -z "${move}" ]; then
 				move=${OPTARG};
 			fi;
 			;;
 		i|ident)
-			if [ -z "${ident}" ];
-			then
+			if [ -z "${ident}" ]; then
 				ident=${OPTARG};
 			fi;
 			;;
 		x|compress-software)
-			if [ -z "${compress_software}" ];
-			then
+			if [ -z "${compress_software}" ]; then
 				compress_software=${OPTARG};
 			fi;
 			;;
@@ -123,22 +117,18 @@ do
 	esac;
 done;
 
-if [ -z ${source_p} ] || [ -z ${target_f} ];
-then
+if [ -z ${source_p} ] || [ -z ${target_f} ]; then
 	echo "Source and target WAL files missing";
 	error=1;
 fi;
 
-if [ ! -z "${move}" ];
-then
-	if [ ! -d "${move}" ];
-	then
+if [ ! -z "${move}" ]; then
+	if [ ! -d "${move}" ]; then
 		echo "The target move folder is not accessable";
 		error=1;
 	else
 		touch "${move}"/tmpfile || echo "[!] touch failed";
-		if [ ! -f "${move}"/tmpfile ];
-		then
+		if [ ! -f "${move}"/tmpfile ]; then
 			echo "Cannot write to ${move}";
 			error=1;
 		else
@@ -148,90 +138,74 @@ then
 fi;
 
 # -x is given, but no -c
-if [ ! -z "${compress_software}" ] && [ "${compress}" -eq 0 ];
-then
+if [ ! -z "${compress_software}" ] && [ "${compress}" -eq 0 ]; then
 	echo "If you set the compress software option, the compress option needs also to be set";
 	error=1;
 fi;
 
 # if no compression software is select, set the default one
-if [ -z "${compress_software}" ]
-then
+if [ -z "${compress_software}" ]; then
 	compress_software=${default_compress_software};
 fi;
 # check that the compression type is in the valid list and that this binary exists
-if [ "${compress}" -eq 1 ];
-then
+if [ "${compress}" -eq 1 ]; then
 	vcs_valid=0;
 	vcs_exists=0;
 	vcs_compress_flag=0;
-	for vcs in ${valid_compress_software[@]};
-	do
-		if [ "${compress_software}" = "${vcs}" ];
-		then
+	for vcs in ${valid_compress_software[@]}; do
+		if [ "${compress_software}" = "${vcs}" ]; then
 			vcs_valid=1;
 			# check that this software is actually installed
 			# in $PATH list
-			for path in ${PATH//:/ };
-			do
-				if [ -f "${path}/${vcs}" ];
-				then
+			for path in ${PATH//:/ }; do
+				if [ -f "${path}/${vcs}" ]; then
 					vcs_compress_flag=1;
 					vcs_exists=1;
 					compress_cmd="${path}/${vcs}";
 					# lzop needs -U for removal of old file after compression
-					if [ "${compress_software}" = 'lzop' ];
-					then
+					if [ "${compress_software}" = 'lzop' ]; then
 						compress_cmd=${compress_cmd}' -U';
 					fi;
 					# check if in the list for compress levels, if yes, add
 					containsElement "${vcs}" "${compress_level_software[@]}";
 					vcs_compress_flag=$?;
-					if [ "${vcs_compress_flag}" -eq 0 ];
-					then
+					if [ "${vcs_compress_flag}" -eq 0 ]; then
 						compress_cmd=${compress_cmd}' '${default_compress_level};
 					fi;
 				fi;
 			done;
 		fi;
 	done;
-	if [ "${vcs_valid}" -eq 0 ];
-	then
+	if [ "${vcs_valid}" -eq 0 ]; then
 		echo "The given compression software ${compress_software} is not in the valid list ${valid_compress_software[*]}";
 		error=1;
 	fi;
 	# if we cannot find any binary, disable compression
-	if [ "${vcs_exists}" -eq 0 ];
-	then
+	if [ "${vcs_exists}" -eq 0 ]; then
 		echo "The selected compression software ${compress_software} seems not to be installed in any ${PATH} folder";
 		echo "[!] Compression is turned off";
 		compress=0;
 	fi;
 fi;
 
-if [ "${error}" -eq 1 ];
-then
+if [ "${error}" -eq 1 ]; then
 	exit 1;
 fi;
 
 VERSION="";
-if [ ! -z "${ident}" ];
-then
+if [ ! -z "${ident}" ]; then
 	# check if that folder actually exists
 	# do auto detect else
 	# only works with debian style paths
-	if [ -d "/var/lib/${BASE_FOLDER}/${ident}/" ];
-	then
+	if [ -d "/var/lib/${BASE_FOLDER}/${ident}/" ]; then
 		VERSION="${ident}";
 	fi;
 fi;
 # if no version set yet, try auto detect, else set to 9.6 hard
-if [ -z "${VERSION}" ];
-then
+if [ -z "${VERSION}" ]; then
 	# try to run psql from default path and get the version number
 	ident=$(pgv=$(pg_dump --version| grep "pg_dump" | cut -d " " -f 3); if [[ $(echo "${pgv}" | cut -d "." -f 1) -ge 10 ]]; then echo "${pgv}" | cut -d "." -f 1; else echo "${pgv}" | cut -d "." -f 1,2; fi);
-	if [ ! -z "${ident}" ];
-	then
+	if [ ! -z "${ident}" ]; then
 		VERSION="${ident}";
 	else
 		# hard set
@@ -244,10 +218,8 @@ PGSQL="/var/lib/${BASE_FOLDER}/${VERSION}/";
 # folder needs to be owned or 100% writable by the postgres user
 DEST="/var/local/backup/postgres/${VERSION}/wal/";
 # create folder if it does not exist
-if [ ! -d "${DEST}" ];
-then
-	if ! mkdir -p "${DEST}" ;
-	then
+if [ ! -d "${DEST}" ]; then
+	if ! mkdir -p "${DEST}" ; then
 		echo "[!] Cannot create destination folder ${DEST}";
 		exit 1;
 	else
@@ -274,17 +246,14 @@ echo "${DATE} - /bin/cp ${source_p} ${DEST}/${target_f}" >> ${DEST}/wal-copy-log
 # compress all copied file if flag is set
 # if the move flag is also set, this is a combine one, else they are single
 DATE=$(date +"%F %T");
-if [ "${compress}" -eq 1 ] && [ -z "${move}" ];
-then
+if [ "${compress}" -eq 1 ] && [ -z "${move}" ]; then
 	# check if compress_software is set
 	echo "${DATE} - ${compress_cmd} ${DEST}/${target_f} &" >> ${DEST}/wal-copy-log.txt
 	${compress_cmd} "${DEST}/${target_f}" &
-elif [ "${compress}" -eq 1 ] && [ ! -z "${move}" ];
-then
+elif [ "${compress}" -eq 1 ] && [ ! -z "${move}" ]; then
 	echo "${DATE} - \$(${compress_cmd} ${DEST}/${target_f}; mv ${DEST}/${target_f}* ${move}/; )&" >> ${DEST}/wal-copy-log.txt
 	$(${compress_cmd} "${DEST}/${target_f}"; mv "${DEST}/${target_f}"* "${move}/"; ) &
-elif [ "${compress}" -eq 0 ] && [ ! -z "${move}" ];
-then
+elif [ "${compress}" -eq 0 ] && [ ! -z "${move}" ]; then
 	DATE=`date +"%F %T"`
 	echo "${DATE} - mv ${DEST}/${target_f} ${move}/ &" >> ${DEST}/wal-copy-log.txt
 	mv "${DEST}/${target_f}"* "${move}/" &
