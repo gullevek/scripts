@@ -67,7 +67,7 @@ while getopts ":c:vldh" opt; do
 	esac;
 done;
 
-# add trailing slash for base folder
+# add trailing slasd for base folder
 [[ "${BASE_FOLDER}" != */ ]] && BASE_FOLDER="${BASE_FOLDER}/";
 
 if [ ! -f "${BASE_FOLDER}${SETTINGS_FILE}" ]; then
@@ -186,21 +186,21 @@ while read include_folder; do
 				# if still a * inside -> add as is, else check for folder
 				if [[ "${include_folder}" =~ $REGEX_GLOB ]]; then
 					FOLDER_OK=1;
-					COMMAND=${COMMAND}" ${include_folder}";
 					echo "+ [I] Backup folder with folder path glob '${include_folder}'";
+					# glob (*) would be escape so we replace it with a temp part and then reinsert it
+					COMMAND=${COMMAND}" "$(printf "%q" $(echo "${include_folder}" | sed 's/\*/_STARGLOB_/g') | sed 's/_STARGLOB_/\*/g');
 				elif [ ! -d "${_include_folder}" ]; then
 					echo "- [I] Backup folder with glob '${include_folder}' does not exist or is not accessable";
 				else
 					FOLDER_OK=1;
-					COMMAND=${COMMAND}" ${include_folder}";
 					echo "+ [I] Backup folder with glob '${include_folder}'";
+					COMMAND=${COMMAND}" "$(printf "%q" ${include_folder});
 				fi;
 			# normal folder
 			elif [ ! -d "${include_folder}" ] && [ ! -e "${include_folder}" ]; then
 				echo "- [I] Backup folder or file '${include_folder}' does not exist or is not accessable";
 			else
 				FOLDER_OK=1;
-				COMMAND=${COMMAND}" ${include_folder}";
 				# if it is a folder, remove the last / or the symlink check will not work
 				if [ -d "${include_folder}" ]; then
 					_include_folder=${include_folder%/*};
@@ -213,6 +213,7 @@ while read include_folder; do
 				else
 					echo "+ [I] Backup folder or file '${include_folder}'";
 				fi;
+				COMMAND=${COMMAND}" "$(printf "%q" ${include_folder});
 			fi;
 		fi;
 	fi;
@@ -220,7 +221,8 @@ done<"${BASE_FOLDER}${INCLUDE_FILE}";
 # exclude list
 if [ -f "${BASE_FOLDER}${EXCLUDE_FILE}" ]; then
 	# check that the folders in that exclude file are actually valid, remove non valid ones and warn
-	TMP_EXCLUDE_FILE=$(mktemp --tmpdir ${EXCLUDE_FILE}.XXXXXXXX);
+	#TMP_EXCLUDE_FILE=$(mktemp --tmpdir ${EXCLUDE_FILE}.XXXXXXXX); #non mac
+	TMP_EXCLUDE_FILE=$(mktemp ${BASE_FOLDER}${EXCLUDE_FILE}.XXXXXXXX);
 	while read exclude_folder; do
 		# strip any leading spaces from that folder
 		exclude_folder=$(echo "${exclude_folder}" | sed -e 's/^[ \t]*//');
