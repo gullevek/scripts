@@ -3,7 +3,17 @@
 set -e -u -o pipefail
 # setup log before everything else
 LOG='/var/log/pg_db_dump_file.log';
-exec &>> ${LOG};
+# if this is not a root user or file is not accessable we fall back to pwd
+# if this is still not writeable, then fall back to $HOME
+if [[ -f "${LOG}" && ! -w "${LOG}" ]] || [[ ! -f "${LOG}" && ! -w "/var/log" ]]; then
+	LOG="$(pwd)/pg_db_dump_file.log";
+
+	if [[ -f "${LOG}" && ! -w "${LOG}" ]] || [[ ! -f "${LOG}" && ! -w "$(pwd)" ]]; then
+		LOG="${HOME}/pg_db_dump_file.log";
+	fi;
+fi;
+# log to file and also write to stdout
+exec &> >(tee -a "${LOG}");
 
 # dumps all the databases in compressed (custom) format
 # EXCLUDE: space seperated list of database names to be skipped
@@ -390,7 +400,7 @@ function get_dump_file_name
 		# get the last sequence and cut any leading 0 so we can run +1 on it
 		seq=$(echo $i | cut -d "." -f 3 | cut -d "_" -f 4 | sed -e "s/^0//g");
 	done;
-	if [ ${seq} ]; then
+	if [ ! -z ${seq} ]; then
 		# add +1 and if < 10 prefix with 0
 		let seq=${seq}+1;
 		if [ ${seq} -lt 10 ]; then
@@ -418,7 +428,7 @@ function get_dump_databases
 	if [ ${GLOBALS} -eq 1 ]; then
 		search_names+=("pg_globals.*");
 	fi;
-	for owner_db in $(${PG_PSQL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -d template1 -t -A -F "," -X -q -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname, pg_catalog.pg_encoding_to_char(encoding) FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)';") do
+	for owner_db in $(${PG_PSQL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -d template1 -t -A -F "," -X -q -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname, pg_catalog.pg_encoding_to_char(encoding) FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)';"); do
 		db=$(echo ${owner_db} | cut -d "," -f 2);
 		# check if we exclude this db
 		exclude=0;
@@ -473,7 +483,7 @@ function clean_up
 				# if we do number based delete of old data, but only if the number of files is bigger than the keep number or equal if we do PRE_RUN_CLEAN_UP
 				# this can be error, but we allow it -> script should not abort here
 				count=$(ls ${BACKUPDIR}"/"${name}${DB_TYPE}*.sql | wc -l) || true;
-				if [ ${PRE_RUN_CLEAN_UP} -eq 1 ] then
+				if [ ${PRE_RUN_CLEAN_UP} -eq 1 ]; then
 					let count=${count}+1;
 				fi;
 				if [ ${count} -gt ${KEEP} ]; then
@@ -548,7 +558,7 @@ else
 fi;
 
 filesize_sum=0;
-for owner_db in $(${PG_PSQL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -d template1 -t -A -F "," -X -q -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname, pg_catalog.pg_encoding_to_char(encoding) AS encoding FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)' ORDER BY datname;") do
+for owner_db in $(${PG_PSQL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -d template1 -t -A -F "," -X -q -c "SELECT pg_catalog.pg_get_userbyid(datdba) AS owner, datname, pg_catalog.pg_encoding_to_char(encoding) AS encoding FROM pg_catalog.pg_database WHERE datname "\!"~ 'template(0|1)' ORDER BY datname;"); do
 	# get the user who owns the DB too
 	owner=$(echo ${owner_db} | cut -d "," -f 1);
 	db=$(echo ${owner_db} | cut -d "," -f 2);
@@ -556,7 +566,7 @@ for owner_db in $(${PG_PSQL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -d temp
 	# check if we exclude this db
 	exclude=0;
 	include=0;
-	for excl_db in ${EXCLUDE};z do
+	for excl_db in ${EXCLUDE}; do
 		if [ "${db}" = "${excl_db}" ]; then
 			exclude=1;
 		fi;

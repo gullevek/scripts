@@ -9,7 +9,7 @@ function usage ()
 	cat <<- EOT
 	Restores a single database dump to a database
 
-	Usage: ${0##/*/} -o <DB OWNER> -d <DB NAME> -f <FILE NAME> [-h <DB HOST>] [-p <DB PORT>] [-e <ENCODING>] [-i <POSTGRES VERSION>] [-j <JOBS>] [-r|-a] [-n]
+	Usage: ${0##/*/} -o <DB OWNER> -d <DB NAME> -f <FILE NAME> [-h <DB HOST>] [-p <DB PORT>] [-e <ENCODING>] [-i <POSTGRES VERSION>] [-j <JOBS>] [-s] [-r|-a] [-n]
 
 	-o <DB OWNER>: The user who will be owner of the database to be restored
 	-d <DB NAME>: The database to restore the file to
@@ -19,6 +19,7 @@ function usage ()
 	-e <ENCODING>: optional encoding name, if not given 'UTF8' is used
 	-i <POSTGRES VERSION>: optional postgresql version in the format X.Y, if not given the default is used (current active)
 	-j <JOBS>: Run how many jobs Parallel. If not set, 2 jobs are run parallel
+	-s: Restore only schema, no data
 	-r: use redhat base paths instead of debian
 	-a: use amazon base paths instead of debian
 	-n: dry run, do not do anything, just test flow
@@ -28,8 +29,11 @@ function usage ()
 _port=5432
 _host='local';
 _encoding='UTF8';
+role='';
+schema='';
 NO_ASK=0;
 TEMPLATEDB='template0';
+SCHEMA_ONLY=0;
 REDHAT=0;
 AMAZON=0;
 DRY_RUN=0;
@@ -38,7 +42,7 @@ PORT_REGEX="^[0-9]{4,5}$";
 OPTARG_REGEX="^-";
 MAX_JOBS='';
 # if we have options, set them and then ignore anything below
-while getopts ":o:d:h:f:p:e:i:j:raqnm" opt; do
+while getopts ":o:d:h:f:p:e:i:j:raqnms" opt; do
 	# pre test for unfilled
 	if [ "${opt}" = ":" ] || [[ "${OPTARG-}" =~ ${OPTARG_REGEX} ]]; then
 		if [ "${opt}" = ":" ]; then
@@ -85,6 +89,8 @@ while getopts ":o:d:h:f:p:e:i:j:raqnm" opt; do
 		o|owner)
 			if [ -z "$owner" ]; then
 				owner=$OPTARG;
+				# if not standard user we need to set restore role so tables/etc get set to new user
+				role="--role $owner";
 			fi;
 			;;
 		d|database)
@@ -133,6 +139,10 @@ while getopts ":o:d:h:f:p:e:i:j:raqnm" opt; do
 			;;
 		n|dry-run)
 			DRY_RUN=1;
+			;;
+		s|schema-only)
+			SCHEMA_ONLY=1
+			schema='-s';
 			;;
 		m|help)
 			usage;
@@ -349,6 +359,9 @@ if [ -z "$found" ]; then
 fi;
 
 echo "Will drop database '$database' on host '$_host:$_port' and load file '$file' with user '$owner', set encoding '$encoding' and use database version '$ident'";
+if [ $SCHEMA -eq 1 ]; then
+	echo "!!!!!!! WILL ONLY RESTORE SCHEMA, NO DATA !!!!!!!";
+fi;
 if [ $NO_ASK -eq 1 ]; then
 	go='yes';
 else
@@ -387,9 +400,9 @@ else
 	# RESTORE DATA
 	echo "Restore data from $file to DB $database and $MAX_JOBS [$_host:$_port] @ `date +"%F %T"`";
 	if [ $DRY_RUN -eq 0 ]; then
-		$PG_RESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>restore_errors.$LOG_FILE_EXT;
+		$PG_RESTORE -U postgres -d $database -F c -v -c $schema -j $MAX_JOBS $host $port $role $file 2>restore_errors.$LOG_FILE_EXT;
 	else
-		echo $PG_RESTORE -U postgres -d $database -F c -v -c -j $MAX_JOBS $host $port $file 2>restore_errors.$LOG_FILE_EXT;
+		echo $PG_RESTORE -U postgres -d $database -F c -v -c $schema -j $MAX_JOBS $host $port $role $file 2>restore_errors.$LOG_FILE_EXT;
 	fi;
 	# BUG FIX FOR POSTGRESQL 9.6.2 db_dump
 	# it does not dump the default public ACL so the owner of the DB cannot access the data, check if the ACL dump is missing and do a basic restore
