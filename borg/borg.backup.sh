@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 
-set -e -u -o pipefail
+# turn off all error aborting to not skip out on borg info call on unset repo
+set -ETu #-e -o pipefail
+trap cleanup SIGINT SIGTERM ERR EXIT
+
+cleanup() {
+	# script cleanup here
+	echo "Some part of the script failed with an error: $? @LINE: $(caller)";
+	# end trap
+	trap - SIGINT SIGTERM ERR EXIT
+}
 
 # creates borg backup based on the include/exclude files
 # if base borg folder (backup files) does not exist, it will automatically init it
@@ -15,6 +24,7 @@ SETTINGS_FILE="borg.backup.settings";
 VERBOSE=0;
 LIST=0;
 DEBUG=0;
+INFO=0;
 # other variables
 TARGET_SERVER='';
 REGEX='';
@@ -34,11 +44,12 @@ function usage()
 	-c <config folder>: if this is not given, ${BASE_FOLDER} is used
 	-v: be verbose
 	-d: only do dry run
+	-i: print out only info
 	EOT
 }
 
 # set options
-while getopts ":c:vldh" opt; do
+while getopts ":c:vldih" opt; do
 	case "${opt}" in
 		c|config)
 			BASE_FOLDER=${OPTARG};
@@ -48,6 +59,9 @@ while getopts ":c:vldh" opt; do
 			;;
 		l|list)
 			LIST=1;
+			;;
+		i|info)
+			INFO=1;
 			;;
 		d|debug)
 			DEBUG=1;
@@ -100,7 +114,11 @@ fi;
 
 # if we have user/host then we build the ssh command
 TARGET_SERVER='';
-if [ ! -z "${TARGET_USER}" ] && [ ! -z "${TARGET_HOST}" ]; then
+# allow host only (if full setup in .ssh/config)
+# user@host
+if [ ! -z "${TARGET_HOST}" ]; then
+	TARGET_SERVER=${TARGET_HOST}":";
+elif [ ! -z "${TARGET_USER}" ] && [ ! -z "${TARGET_HOST}" ]; then
 	TARGET_SERVER=${TARGET_USER}"@"${TARGET_HOST}":";
 fi;
 REPOSITORY=${TARGET_SERVER}${TARGET_FOLDER}${BACKUP_FILE};
@@ -141,27 +159,6 @@ fi;
 # home folder, needs to be set if there is eg a HOME=/ in the crontab
 if [ ! -w "${HOME}" ] || [ "${HOME}" = '/' ]; then
 	HOME=$(eval echo "$(whoami)");
-fi;
-
-# if the repository is no there, call init to create it
-# if this is user@host, we need to use ssh command to check if the file is there
-# else a normal check is ok
-if [ ! -z "${TARGET_SERVER}" ]; then
-	# remove trailing : for this
-	TARGET_SERVER=${TARGET_SERVER/:};
-	# use ssh command to check remote existense
-	if [ $(ssh "${TARGET_SERVER}" "if [ -d \"${TARGET_FOLDER}${BACKUP_FILE}\" ]; then echo 1; else echo 0; fi;") -eq 0 ]; then
-		INIT_REPOSITORY=1;
-	fi;
-elif [ ! -d "${REPOSITORY}" ]; then
-	INIT_REPOSITORY=1;
-fi;
-if [ ${INIT_REPOSITORY} -eq 1 ]; then
-	if [ ${DEBUG} -eq 1 ]; then
-		echo "borg init -e ${ENCRYPTION} ${OPT_VERBOSE} ${REPOSITORY}";
-	else
-		borg init -e ${ENCRYPTION} ${OPT_VERBOSE} ${REPOSITORY}; # should trap and exit properly here
-	fi
 fi;
 
 # base command
@@ -273,7 +270,41 @@ if [ -f "${BASE_FOLDER}${EXCLUDE_FILE}" ]; then
 	COMMAND=${COMMAND}" --exclude-from ${TMP_EXCLUDE_FILE}";
 fi;
 
+# if info print info and then abort run
+if [ ${INFO} -eq 1 ]; then
+	echo "borg info ${REPOSITORY}";
+	echo "Run command: ";
+	echo "${COMMAND}";
+	exit 2;
+fi;
+
 if [ $FOLDER_OK -eq 1 ]; then
+	# if the repository is no there, call init to create it
+	# if this is user@host, we need to use ssh command to check if the file is there
+	# else a normal check is ok
+	if [ ! -z "${TARGET_SERVER}" ]; then
+		if [ ${DEBUG} -eq 1 ]; then
+			echo "borg info ${REPOSITORY} 2>&1|grep \"Repository ID:\"";
+		fi;
+		# use borg info and check if it returns "Repository ID:" in the first line
+		REPO_CHECK=$(borg info ${REPOSITORY} 2>&1|grep "Repository ID:");
+		# this is currently a hack to work round the error code in borg info
+		# this checks if REPO_CHECK holds this error message and then starts init
+		regex="^Some part of the script failed with an error:";
+		if [[ -z "${REPO_CHECK}" ]] || [[ "${REPO_CHECK}" =~ ${regex} ]]; then
+			INIT_REPOSITORY=1;
+		fi;
+	elif [ ! -d "${REPOSITORY}" ]; then
+		INIT_REPOSITORY=1;
+	fi;
+	if [ ${INIT_REPOSITORY} -eq 1 ]; then
+		if [ ${DEBUG} -eq 1 ]; then
+			echo "borg init -e ${ENCRYPTION} ${OPT_VERBOSE} ${REPOSITORY}";
+		else
+			# should trap and exit properly here
+			borg init -e ${ENCRYPTION} ${OPT_VERBOSE} ${REPOSITORY};
+		fi
+	fi;
 	# execute backup command
 	if [ ${DEBUG} -eq 1 ]; then
 		echo ${COMMAND};
