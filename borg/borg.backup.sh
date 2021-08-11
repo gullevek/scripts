@@ -2,18 +2,19 @@
 
 # turn off all error aborting to not skip out on borg info call on unset repo
 set -ETu #-e -o pipefail
-trap cleanup SIGINT SIGTERM ERR EXIT
+trap cleanup SIGINT SIGTERM ERR
 
 cleanup() {
 	# script cleanup here
 	echo "Some part of the script failed with an error: $? @LINE: $(caller)";
 	# end trap
-	trap - SIGINT SIGTERM ERR EXIT
+	trap - SIGINT SIGTERM ERR
 }
 
+# set last edit date + time
+VERSION="20210810-1552";
 # creates borg backup based on the include/exclude files
 # if base borg folder (backup files) does not exist, it will automatically init it
-
 # base folder
 BASE_FOLDER="/usr/local/scripts/borg/";
 # include and exclude file
@@ -35,6 +36,26 @@ PRUNE_DEBUG='';
 INIT_REPOSITORY=0;
 FOLDER_OK=0;
 TMP_EXCLUDE_FILE='';
+# opt flags
+OPT_VERBOSE='';
+OPT_PROGRESS='';
+OPT_LIST='';
+OPT_REMOTE='';
+# config variables (will be overwritten from .settings file)
+TARGET_USER="";
+TARGET_HOST="";
+TARGET_PORT="";
+TARGET_BORG_PATH="";
+TARGET_FOLDER="";
+BACKUP_FILE="";
+COMPRESSION="";
+COMPRESSION_LEVEL="";
+ENCRYPTION="";
+DATE=""; # to be deprecated
+BACKUP_SET="";
+KEEP_DAYS="";
+KEEP_WEEKS="";
+KEEP_MONTHS="";
 
 function usage()
 {
@@ -43,8 +64,12 @@ function usage()
 
 	-c <config folder>: if this is not given, ${BASE_FOLDER} is used
 	-v: be verbose
+	-l: list files during backup
 	-d: only do dry run
 	-i: print out only info
+	-h: this help page
+
+	Version: ${VERSION}
 	EOT
 }
 
@@ -68,7 +93,7 @@ while getopts ":c:vldih" opt; do
 			;;
 		h|help)
 			usage;
-			exit 0;
+			exit;
 			;;
 		:)
 			echo "Option -$OPTARG requires an argument."
@@ -86,53 +111,70 @@ done;
 
 if [ ! -f "${BASE_FOLDER}${SETTINGS_FILE}" ]; then
 	echo "No settings file could be found: ${BASE_FOLDER}${SETTINGS_FILE}";
-	exit 0;
+	exit 1;
 fi;
 
+# verbose & progress
 if [ ${VERBOSE} -eq 1 ]; then
 	OPT_VERBOSE="-v";
 	OPT_PROGRESS="-p";
-else
-	OPT_VERBOSE='';
-	OPT_PROGRESS='';
+	echo "Script version: ${VERSION}";
 fi;
+# list files
 if [ ${LIST} -eq 1 ]; then
 	OPT_LIST="--list";
-else
-	OPT_LIST="";
 fi;
 
+# read config file
 . "${BASE_FOLDER}${SETTINGS_FILE}";
+
+# remote borg path
+if [ ! -z "${TARGET_BORG_PATH}" ]; then
+	OPT_REMOTE="--remote-path "$(printf "%q" "${TARGET_BORG_PATH}");
+fi;
 
 if [ -z "${TARGET_FOLDER}" ]; then
 	echo "No target folder has been set yet";
-	exit 0;
+	exit 1;
 else
-	# add safety / in case it is missing
-	TARGET_FOLDER=${TARGET_FOLDER}"/";
+	# This does not care for multiple trailing or leading slashes
+	# it just makes sure we have at least one set
+	# for if we have a single slash, remove it
+	TARGET_FOLDER=${TARGET_FOLDER%/}
+	TARGET_FOLDER=${TARGET_FOLDER#/}
+	# and add slash front and back and escape the path
+	TARGET_FOLDER=$(printf "%q" "/${TARGET_FOLDER}/");
 fi;
 
 # if we have user/host then we build the ssh command
 TARGET_SERVER='';
 # allow host only (if full setup in .ssh/config)
-# user@host
-if [ ! -z "${TARGET_HOST}" ]; then
-	TARGET_SERVER=${TARGET_HOST}":";
+# user@host OR ssh://user@host:port/ IF TARGET_PORT is set
+# user/host/port
+if [ ! -z "${TARGET_USER}" ] && [ ! -z "${TARGET_HOST}" ] && [ ! -z "${TARGET_PORT}" ]; then
+	TARGET_SERVER="ssh://"${TARGET_USER}"@"${TARGET_HOST}":"${TARGET_PORT}"/";
+# host/port
+elif [ ! -z "${TARGET_HOST}" ] && [ ! -z "${TARGET_PORT}" ]; then
+	TARGET_SERVER="ssh://"${TARGET_HOST}":"${TARGET_PORT}"/";
+# user/host
 elif [ ! -z "${TARGET_USER}" ] && [ ! -z "${TARGET_HOST}" ]; then
 	TARGET_SERVER=${TARGET_USER}"@"${TARGET_HOST}":";
+# host
+elif [ ! -z "${TARGET_HOST}" ]; then
+	TARGET_SERVER=${TARGET_HOST}":";
 fi;
 REPOSITORY=${TARGET_SERVER}${TARGET_FOLDER}${BACKUP_FILE};
 
 if [ ! -f "${BASE_FOLDER}${INCLUDE_FILE}" ]; then
 	echo "The include folder file ${INCLUDE_FILE} is missing";
-	exit 0;
+	exit 1;
 fi;
 
 # error if the repository file still has the default name
 REGEX="^some\-prefix\-";
 if [[ "${BACKUP_FILE}" =~ ${REGEX} ]]; then
 	echo "The repository name still has the default prefix: ${BACKUP_FILE}";
-	exit 0;
+	exit 1;
 fi;
 
 # check compression if given is valid and check compression level is valid if given
@@ -145,14 +187,14 @@ if [ ! -z "${COMPRESSION}" ]; then
 		if [ ! -z "${COMPRESSION_LEVEL}" ] && [ "${COMPRESSION}" != "lz4" ]; then
 			if ! [[ "${COMPRESSION_LEVEL}" =~ ${REGEX_NUMERIC} ]]; then
 				echo "Compression level needs to be a value from 0 to 9: ${COMPRESSION_LEVEL}";
-				exit 0;
+				exit 1;
 			else
 				OPT_COMPRESSION=${OPT_COMPRESSION}","${COMPRESSION_LEVEL};
 			fi;
 		fi;
 	else
 		echo "Compress setting need to be lz4, zlib or lzma. Or empty for no compression: ${COMPRESSION}";
-		exit 0;
+		exit 1;
 	fi;
 fi;
 
@@ -161,16 +203,29 @@ if [ ! -w "${HOME}" ] || [ "${HOME}" = '/' ]; then
 	HOME=$(eval echo "$(whoami)");
 fi;
 
+# set BACKUP_SET if empty, check for for DATE is set
+if [ -z "${BACKUP_SET}" ]; then
+	# DATE is deprecated and will be removed
+	if [ ! -z "${DATE}" ]; then
+		echo "DEPRECATED: The use of DATE variable is deprecated, use BACKUP_SET instead";
+		BACKUP_SET="${DATE}";
+	else
+		# default
+		BACKUP_SET="{now:%Y-%m-%d}";
+	fi;
+fi;
+
 # base command
-COMMAND="borg create -v ${OPT_LIST} ${OPT_PROGRESS} ${OPT_COMPRESSION} -s ${REPOSITORY}::${DATE}";
+COMMAND="borg create ${OPT_REMOTE} -v ${OPT_LIST} ${OPT_PROGRESS} ${OPT_COMPRESSION} -s ${REPOSITORY}::${BACKUP_SET}";
 # include list
 while read include_folder; do
 	# strip any leading spaces from that folder
 	include_folder=$(echo "${include_folder}" | sed -e 's/^[ \t]*//');
-	# check that those folders exist, warn on error, but do not exit unless there are no valid folders at all
+	# check that those folders exist, warn on error,
+	# but do not exit unless there are no valid folders at all
 	# skip folders that are with # in front (comment)
 	if [[ "${include_folder}" =~ ${REGEX_COMMENT} ]]; then
-		echo "- [I] Do not include folder '${include_folder}'";
+		echo "# [C] Comment: '${include_folder}'";
 	else
 		# skip if it is empty
 		if [ ! -z "${include_folder}" ]; then
@@ -226,7 +281,7 @@ if [ -f "${BASE_FOLDER}${EXCLUDE_FILE}" ]; then
 		# folder or any type of file is ok
 		# because of glob files etc, exclude only comments (# start)
 		if [[ "${exclude_folder}" =~ ${REGEX_COMMENT} ]]; then
-			echo "- [C] Comment: '${exclude_folder}'";
+			echo "# [C] Comment: '${exclude_folder}'";
 		else
 			# skip if it is empty
 			if [ ! -z "${exclude_folder}" ]; then
@@ -272,10 +327,15 @@ fi;
 
 # if info print info and then abort run
 if [ ${INFO} -eq 1 ]; then
-	echo "borg info ${REPOSITORY}";
+	echo "Script version: ${VERSION}";
+	echo "borg info ${OPT_REMOTE} ${REPOSITORY}";
 	echo "Run command: ";
 	echo "${COMMAND}";
-	exit 2;
+	# remove the temporary exclude file if it exists
+	if [ -f "${TMP_EXCLUDE_FILE}" ]; then
+		rm -f "${TMP_EXCLUDE_FILE}";
+	fi;
+	exit;
 fi;
 
 if [ $FOLDER_OK -eq 1 ]; then
@@ -284,10 +344,10 @@ if [ $FOLDER_OK -eq 1 ]; then
 	# else a normal check is ok
 	if [ ! -z "${TARGET_SERVER}" ]; then
 		if [ ${DEBUG} -eq 1 ]; then
-			echo "borg info ${REPOSITORY} 2>&1|grep \"Repository ID:\"";
+			echo "borg info ${OPT_REMOTE} ${REPOSITORY} 2>&1|grep \"Repository ID:\"";
 		fi;
 		# use borg info and check if it returns "Repository ID:" in the first line
-		REPO_CHECK=$(borg info ${REPOSITORY} 2>&1|grep "Repository ID:");
+		REPO_CHECK=$(borg info ${OPT_REMOTE} ${REPOSITORY} 2>&1|grep "Repository ID:");
 		# this is currently a hack to work round the error code in borg info
 		# this checks if REPO_CHECK holds this error message and then starts init
 		regex="^Some part of the script failed with an error:";
@@ -299,10 +359,10 @@ if [ $FOLDER_OK -eq 1 ]; then
 	fi;
 	if [ ${INIT_REPOSITORY} -eq 1 ]; then
 		if [ ${DEBUG} -eq 1 ]; then
-			echo "borg init -e ${ENCRYPTION} ${OPT_VERBOSE} ${REPOSITORY}";
+			echo "borg init ${OPT_REMOTE} -e ${ENCRYPTION} ${OPT_VERBOSE} ${REPOSITORY}";
 		else
 			# should trap and exit properly here
-			borg init -e ${ENCRYPTION} ${OPT_VERBOSE} ${REPOSITORY};
+			borg init ${OPT_REMOTE} -e ${ENCRYPTION} ${OPT_VERBOSE} ${REPOSITORY};
 		fi
 	fi;
 	# execute backup command
@@ -319,14 +379,14 @@ if [ $FOLDER_OK -eq 1 ]; then
 	fi;
 else
 	echo "No folders where set for the backup";
-	exit 0;
+	exit 1;
 fi;
 
 # clean up, always verbose
 echo "Prune repository with keep daily: ${KEEP_DAYS}, weekly: ${KEEP_WEEKS}, monthly: ${KEEP_MONTHS}";
 if [ ${DEBUG} -eq 1 ]; then
-	echo "borg prune -v -s --list ${PRUNE_DEBUG} ${REPOSITORY} --keep-daily=${KEEP_DAYS} --keep-weekly=${KEEP_WEEKS} --keep-monthly=${KEEP_MONTHS}";
+	echo "borg prune ${OPT_REMOTE} -v -s --list ${PRUNE_DEBUG} ${REPOSITORY} --keep-daily=${KEEP_DAYS} --keep-weekly=${KEEP_WEEKS} --keep-monthly=${KEEP_MONTHS}";
 fi;
-borg prune -v -s --list ${PRUNE_DEBUG} ${REPOSITORY} --keep-daily=${KEEP_DAYS} --keep-weekly=${KEEP_WEEKS} --keep-monthly=${KEEP_MONTHS} 2>&1 || echo "[!] Attic prune aborted";
+borg prune ${OPT_REMOTE} -v -s --list ${PRUNE_DEBUG} ${REPOSITORY} --keep-daily=${KEEP_DAYS} --keep-weekly=${KEEP_WEEKS} --keep-monthly=${KEEP_MONTHS} 2>&1 || echo "[!] Attic prune aborted";
 
 ## END

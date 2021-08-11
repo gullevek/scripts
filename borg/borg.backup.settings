@@ -1,24 +1,32 @@
-# Attic backup wrapper scripts settings
+# Borg backup wrapper scripts settings
 
-# target users, etc
+# SSH user, host, port
+# if ssh config is set only host needs to be filled
 TARGET_USER="";
 TARGET_HOST="";
+TARGET_PORT="";
+# if borg is not in default path, for ssh backup only
+TARGET_BORG_PATH="";
+# folder where the backup folder will be created
 TARGET_FOLDER="";
-# the backup file for this host
+# the backup file (folder) for this host
 BACKUP_FILE="some-prefix-"`hostname`".borg";
 # compression settings (empty for none, lz4, zlib, lzma)
 # level, if empty then default, else number between 0 and 9
-COMPRESSION="zlib"
-COMPRESSION_LEVEL=""
+COMPRESSION="zlib";
+COMPRESSION_LEVEL="";
 # encryption settings:
 # SHA-256: 'none', 'authenticated', 'repokey', 'keyfile'
 # BLAKE2b: 'authenticated-blake2', 'repokey-blake2', 'keyfile-blake2'
 # Note: none does not encrypt
 # Blank passwords allowed for only key (if used, use keyfile)
 # See: http://borgbackup.readthedocs.io/en/stable/faq.html#how-can-i-specify-the-encryption-passphrase-programmatically
-ENCRYPTION="none"
+ENCRYPTION="none";
+# default is %Y-%m-%d
 # todays date, if more than one per day add -%H%M for hour/minute
-DATE=$(date +%Y-%m-%d);
+# it can also be "{hostname}-{user}-{now:%Y-%m-%dT%H:%M:%S.%f}"
+BACKUP_SET="";
+# DATE=$(date +%Y-%m-%d);
 # post run cleanup times
 KEEP_DAYS=7;
 KEEP_WEEKS=4;
