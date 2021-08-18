@@ -14,7 +14,7 @@ function usage ()
 	-o <DB OWNER>: The user who will be owner of the database to be restored
 	-d <DB NAME>: The database to restore the file to
 	-f <FILE NAME>: the data that should be loaded
-	-h <DB HOST>: optional hostname, if not given 'localhost' is used
+	-h <DB HOST>: optional hostname, if not given 'localhost' is used. Use 'local' to use unix socket
 	-p <DB PORT>: optional port number, if not given '5432' is used
 	-e <ENCODING>: optional encoding name, if not given 'UTF8' is used
 	-i <POSTGRES VERSION>: optional postgresql version in the format X.Y, if not given the default is used (current active)
@@ -89,8 +89,9 @@ while getopts ":o:d:h:f:p:e:i:j:raqnms" opt; do
 		o|owner)
 			if [ -z "$owner" ]; then
 				owner=$OPTARG;
-				# if not standard user we need to set restore role so tables/etc get set to new user
-				role="--role $owner";
+				# if not standard user we need to set restore role
+				# so tables/etc get set to new user
+				role="--no-owner --role $owner";
 			fi;
 			;;
 		d|database)
@@ -110,7 +111,12 @@ while getopts ":o:d:h:f:p:e:i:j:raqnms" opt; do
 			;;
 		h|hostname)
 			if [ -z "$host" ]; then
-				host='-h '$OPTARG;
+				# if local it is socket
+				if [ "$OPTARG" != "local" ]; then
+					host='-h '$OPTARG;
+				else
+					host='';
+				fi;
 				_host=$OPTARG;
 			fi;
 			;;
@@ -168,8 +174,8 @@ fi;
 NUMBER_REGEX="^[0-9]{1,}$";
 # find the max allowed jobs based on the cpu count
 # because setting more than this is not recommended
-cpu=$(cat /proc/cpuinfo | grep processor|tail -n 1);
-_max_jobs=$[ ${cpu##*: }+0 ]
+cpu=$(cat /proc/cpuinfo | grep processor | tail -n 1);
+_max_jobs=$[ ${cpu##*: }+1 ] # +1 because cpu count starts with 0
 # if the MAX_JOBS is not number or smaller 1 or greate _max_jobs
 if [ ! -z "${MAX_JOBS}" ]; then
 	# check that it is a valid number
@@ -260,8 +266,8 @@ if [ -r "$file" ] && ( [ ! "$owner" ] || [ ! "$database" ] || [ ! "$encoding" ] 
 	# set the others as optional
 	_ident=`echo $db_file | cut -d "." -f 4 | cut -d "-" -f 2`; # db version first part
 	_ident=$_ident'.'`echo $db_file | cut -d "." -f 5 | cut -d "_" -f 1`; # db version, second part (after .)
-	__host=`echo $db_file | cut -d "." -f 5 | cut -d "_" -f 2`;
-	__port=`echo $db_file | cut -d "." -f 5 | cut -d "_" -f 3`;
+	__host=`echo $db_file | cut -d "." -f 4 | cut -d "_" -f 2`;
+	__port=`echo $db_file | cut -d "." -f 4 | cut -d "_" -f 3`;
 	# if any of those are not set, override by the file name settings
 	if [ ! "$owner" ]; then
 		owner=$_owner;
@@ -275,7 +281,7 @@ if [ -r "$file" ] && ( [ ! "$owner" ] || [ ! "$database" ] || [ ! "$encoding" ] 
 		_port=$__port;
 	fi;
 	# unless it is local and no command line option is set, set the target connection host
-	if [ ! "$host" ] && [ "$__host" != "local" ]; then
+	if [ ! "$host" ] && [ "$__host" != "local" ] && [ "$_host" != "local" ]; then
 		host='-h '$__host;
 		_host=$__host;
 	fi;
@@ -296,7 +302,7 @@ if [ ! "$file" ] || [ ! -f "$file" ]; then
 	echo "The file has not been set or the file given could not be found.";
 	exit 1;
 fi;
-if [ ! "$owner" ] || [ ! "$encoding" ] || [ ! "$database" ] then
+if [ ! "$owner" ] || [ ! "$encoding" ] || [ ! "$database" ]; then
 	echo "The Owner, database name and encoding could not be set automatically, the have to be given as command line options.";
 	exit 1;
 fi;
@@ -337,7 +343,6 @@ PG_RESTORE=$PG_PATH"pg_restore";
 PG_PSQL=$PG_PATH"psql";
 TEMP_FILE="temp";
 LOG_FILE_EXT=$database.`date +"%Y%m%d_%H%M%S"`".log";
-echo "USING POSTGRESQL: $ident";
 
 # core abort if no core files found
 if [ ! -f $PG_PSQL ] || [ ! -f $PG_DROPDB ] || [ ! -f $PG_CREATEDB ] || [ ! -f $PG_RESTORE ]; then
@@ -359,7 +364,7 @@ if [ -z "$found" ]; then
 fi;
 
 echo "Will drop database '$database' on host '$_host:$_port' and load file '$file' with user '$owner', set encoding '$encoding' and use database version '$ident'";
-if [ $SCHEMA -eq 1 ]; then
+if [ $SCHEMA_ONLY -eq 1 ]; then
 	echo "!!!!!!! WILL ONLY RESTORE SCHEMA, NO DATA !!!!!!!";
 fi;
 if [ $NO_ASK -eq 1 ]; then
@@ -382,7 +387,7 @@ else
 		echo $PG_DROPDB -U postgres $host $port $database;
 	fi;
 	# CREATE DATABASE
-	echo "Create DB $database with $owner and encoding $encoding [$_host:$_port] @ `date +"%F %T"`";
+	echo "Create DB $database with $owner and encoding $encoding on [$_host:$_port] @ `date +"%F %T"`";
 	if [ $DRY_RUN -eq 0 ]; then
 		$PG_CREATEDB -U postgres -O $owner -E $encoding -T $TEMPLATEDB $host $port $database;
 	else
@@ -390,7 +395,7 @@ else
 	fi;
 	# CREATE plpgsql LANG
 	if [ -f $PG_CREATELANG ]; then
-		echo "Create plpgsql lang in DB $database [$_host:$_port] @ `date +"%F %T"`";
+		echo "Create plpgsql lang in DB $database on [$_host:$_port] @ `date +"%F %T"`";
 		if [ $DRY_RUN -eq 0 ]; then
 			$PG_CREATELANG -U postgres plpgsql $host $port $database;
 		else
@@ -398,7 +403,7 @@ else
 		fi;
 	fi;
 	# RESTORE DATA
-	echo "Restore data from $file to DB $database and $MAX_JOBS [$_host:$_port] @ `date +"%F %T"`";
+	echo "Restore data from $file to DB $database on [$_host:$_port] with Jobs $MAX_JOBS @ `date +"%F %T"`";
 	if [ $DRY_RUN -eq 0 ]; then
 		$PG_RESTORE -U postgres -d $database -F c -v -c $schema -j $MAX_JOBS $host $port $role $file 2>restore_errors.$LOG_FILE_EXT;
 	else
