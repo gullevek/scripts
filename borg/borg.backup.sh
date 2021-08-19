@@ -12,7 +12,7 @@ cleanup() {
 }
 
 # set last edit date + time
-VERSION="20210810-1552";
+VERSION="20210819-0901";
 # creates borg backup based on the include/exclude files
 # if base borg folder (backup files) does not exist, it will automatically init it
 # base folder
@@ -50,7 +50,7 @@ TARGET_FOLDER="";
 BACKUP_FILE="";
 COMPRESSION="";
 COMPRESSION_LEVEL="";
-ENCRYPTION="";
+ENCRYPTION="none";
 DATE=""; # to be deprecated
 BACKUP_SET="";
 KEEP_DAYS="";
