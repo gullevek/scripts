@@ -15,7 +15,7 @@ cleanup() {
 }
 
 # set last edit date + time
-VERSION="20210820-1052";
+VERSION="20210820-1409";
 # creates borg backup based on the include/exclude files
 # if base borg folder (backup files) does not exist, it will automatically init it
 # base folder
@@ -62,9 +62,21 @@ ENCRYPTION="none";
 FORCE_CHECK="false";
 DATE=""; # to be deprecated
 BACKUP_SET="";
-KEEP_DAYS="";
-KEEP_WEEKS="";
-KEEP_MONTHS="";
+# default keep 7 days, 4 weeks, 6 months
+# if set 0, ignore
+# note that for last/hourly it is needed to create a different
+# BACKUP SET that includes hour and minute information
+# IF BACKUP_SET is empty, this is automatically added
+# general keep last, if only this is set only last n will be kept
+KEEP_LAST=0;
+KEEP_HOURS=0;
+KEEP_DAYS=7;
+KEEP_WEEKS=4;
+KEEP_MONTHS=6;
+KEEP_YEARS=1;
+# in the format of nY|M|d|h|m|s
+KEEP_WITHIN="";
+
 
 function usage()
 {
@@ -167,6 +179,8 @@ fi;
 # if ENCRYPTION is empty or not in the valid list fall back to none
 if [ -z "${ENCRYPTION}" ]; then
 	ENCRYPTION="none";
+#else
+	# TODO check for invalid encryption string
 fi;
 
 # if force check is true set CHECK to 1unless INFO is 1
@@ -253,17 +267,73 @@ if [ ! -w "${HOME}" ] || [ "${HOME}" = '/' ]; then
 	HOME=$(eval echo "$(whoami)");
 fi;
 
+# build options and info string,
+# also flag BACKUP_SET check if hourly is set
+KEEP_OPTIONS="";
+KEEP_INFO="";
+BACKUP_SET_CHECK=0;
+if [ ${KEEP_LAST} -gt 0 ]; then
+	KEEP_OPTIONS="${KEEP_OPTIONS} --keep-last ${KEEP_LAST}";
+	KEEP_INFO="${KEEP_INFO}, last: ${KEEP_LAST}";
+fi;
+if [ ${KEEP_HOURS} -gt 0 ]; then
+	KEEP_OPTIONS="${KEEP_OPTIONS} --keep-hourly ${KEEP_HOURS}";
+	KEEP_INFO="${KEEP_INFO}, hourly: ${KEEP_HOURS}";
+	BACKUP_SET_CHECK=1;
+fi;
+if [ ${KEEP_DAYS} -gt 0 ]; then
+	KEEP_OPTIONS="${KEEP_OPTIONS} --keep-daily ${KEEP_DAYS}";
+	KEEP_INFO="${KEEP_INFO}, daily: ${KEEP_DAYS}";
+fi;
+if [ ${KEEP_WEEKS} -gt 0 ]; then
+	KEEP_OPTIONS="${KEEP_OPTIONS} --keep-weekly ${KEEP_WEEKS}";
+	KEEP_INFO="${KEEP_INFO}, weekly: ${KEEP_WEEKS}";
+fi;
+if [ ${KEEP_MONTHS} -gt 0 ]; then
+	KEEP_OPTIONS="${KEEP_OPTIONS} --keep-monthly ${KEEP_MONTHS}";
+	KEEP_INFO="${KEEP_INFO}, monthly: ${KEEP_MONTHS}";
+fi;
+if [ ${KEEP_YEARS} -gt 0 ]; then
+	KEEP_OPTIONS="${KEEP_OPTIONS} --keep-yearly ${KEEP_YEARS}";
+	KEEP_INFO="${KEEP_INFO}, yearly: ${KEEP_YEARS}";
+fi;
+if [ ! -z "${KEEP_WITHIN}" ]; then
+	# check for invalid string. can only be number + H|d|w|m|y
+	if [[ "${KEEP_WITHIN}" =~ ^[0-9]+[Hdwmy]{1}$ ]]; then
+		KEEP_OPTIONS="${KEEP_OPTIONS} --keep-within ${KEEP_WITHIN}";
+		KEEP_INFO="${KEEP_INFO}, within: ${KEEP_WITHIN}";
+		if [[ "${KEEP_WITHIN}" == *"H"* ]]; then
+			BACKUP_SET_CHECK=1;
+		fi;
+	else
+		echo "KEEP_WITHIN has invalid string.";
+		exit 1;
+	fi;
+fi;
+# abort if KEEP_OPTIONS is empty
+if [ -z "${KEEP_OPTIONS}" ]; then
+	echo "It seems no KEEP_* entries where set in a valid format.";
+	exit 1;
+fi;
+# remove the first , (first character)
+KEEP_INFO=$(echo "${KEEP_INFO}" | cut -c 2-);
 # set BACKUP_SET if empty, check for for DATE is set
 if [ -z "${BACKUP_SET}" ]; then
 	# DATE is deprecated and will be removed
 	if [ ! -z "${DATE}" ]; then
-		echo "DEPRECATED: The use of DATE variable is deprecated, use BACKUP_SET instead";
+		echo "[!] DEPRECATED: The use of DATE variable is deprecated, use BACKUP_SET instead";
 		BACKUP_SET="${DATE}";
 	else
 		# default
 		BACKUP_SET="{now:%Y-%m-%d}";
 	fi;
 fi;
+# backup set check, and there is no hour entry (%H) in the archive string
+# we add T%H:%M:%S in this case, before the last }
+if [ ${BACKUP_SET_CHECK} -eq 1 ] && [[ "${BACKUP_SET}" != *"%H"* ]]; then
+	BACKUP_SET=$(echo "${BACKUP_SET}" | sed -e "s/}/T%H:%M:%S}/");
+fi;
+
 # if the repository is not there, call init to create it
 # if this is user@host, we need to use ssh command to check if the file is there
 # else a normal check is ok
@@ -288,13 +358,13 @@ if [ ${CHECK} -eq 1 ] || [ ${INIT} -eq 1 ]; then
 	if [ ${CHECK} -eq 1 ] && [ ${INIT} -eq 0 ] && [ ${INIT_REPOSITORY} -eq 0 ] &&
 		[ ! -f "${BASE_FOLDER}${BACKUP_INIT_CHECK}" ]; then
 		# write init file
-		echo "Add missing init check file";
+		echo "[!] Add missing init check file";
 		echo "$(date +%s)" > "${BASE_FOLDER}${BACKUP_INIT_CHECK}";
 	fi;
 	# end if checked but repository is not here
 	if [ ${CHECK} -eq 1 ] && [ ${INIT} -eq 0 ] && [ ${INIT_REPOSITORY} -eq 1 ]; then
 		echo "No repository. Please run with -I flag to initialze repository";
-		exit;
+		exit 1;
 	fi;
 	if [ ${EXIT} -eq 1 ] && [ ${CHECK} -eq 1 ] && [ ${INIT} -eq 0 ]; then
 		echo "Repository exists";
@@ -321,14 +391,14 @@ elif [ ${INIT} -eq 1 ] && [ ${INIT_REPOSITORY} -eq 0 ]; then
 	echo "Repository already initialized";
 	echo "For more information run:"
 	echo "borg info ${OPT_REMOTE} ${REPOSITORY}";
-	exit;
+	exit 1;
 fi;
 
 # check for init file
 if [ ! -f "${BASE_FOLDER}${BACKUP_INIT_CHECK}" ]; then
 	echo "It seems the repository has never been initialized."
 	echo "Please run -I to initialize or if already initialzed run with -C for init update."
-	exit;
+	exit 1;
 fi;
 
 # base command
@@ -476,10 +546,10 @@ else
 fi;
 
 # clean up, always verbose
-echo "Prune repository with keep daily: ${KEEP_DAYS}, weekly: ${KEEP_WEEKS}, monthly: ${KEEP_MONTHS}";
+echo "Prune repository with keep${KEEP_INFO}";
 if [ ${DEBUG} -eq 1 ]; then
-	echo "borg prune ${OPT_REMOTE} -v -s --list ${PRUNE_DEBUG} ${REPOSITORY} --keep-daily=${KEEP_DAYS} --keep-weekly=${KEEP_WEEKS} --keep-monthly=${KEEP_MONTHS}";
+	echo "borg prune ${OPT_REMOTE} -v -s --list ${PRUNE_DEBUG} ${REPOSITORY} ${KEEP_OPTIONS}";
 fi;
-borg prune ${OPT_REMOTE} -v -s --list ${PRUNE_DEBUG} ${REPOSITORY} --keep-daily=${KEEP_DAYS} --keep-weekly=${KEEP_WEEKS} --keep-monthly=${KEEP_MONTHS} 2>&1 || echo "[!] Attic prune aborted";
+borg prune ${OPT_REMOTE} -v -s --list ${PRUNE_DEBUG} ${REPOSITORY} ${KEEP_OPTIONS} 2>&1 || echo "[!] Attic prune aborted";
 
 ## END
