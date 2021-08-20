@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# Run -I first to initialize repository
+# There are no automatic repository checks unless -C is given
+
 # turn off all error aborting to not skip out on borg info call on unset repo
 set -ETu #-e -o pipefail
 trap cleanup SIGINT SIGTERM ERR
@@ -21,11 +24,15 @@ BASE_FOLDER="/usr/local/scripts/borg/";
 INCLUDE_FILE="borg.backup.include";
 EXCLUDE_FILE="borg.backup.exclude";
 SETTINGS_FILE="borg.backup.settings";
+BACKUP_INIT_CHECK="borg.backup.init";
 # debug/verbose
 VERBOSE=0;
 LIST=0;
 DEBUG=0;
 INFO=0;
+CHECK=0;
+INIT=0;
+EXIT=0;
 # other variables
 TARGET_SERVER='';
 REGEX='';
@@ -51,6 +58,7 @@ BACKUP_FILE="";
 COMPRESSION="";
 COMPRESSION_LEVEL="";
 ENCRYPTION="none";
+FORCE_CHECK="false";
 DATE=""; # to be deprecated
 BACKUP_SET="";
 KEEP_DAYS="";
@@ -63,10 +71,13 @@ function usage()
 	Usage: ${0##/*/} [-c <config folder>] [-v] [-d]
 
 	-c <config folder>: if this is not given, ${BASE_FOLDER} is used
+	-C: check if repository exists, if not abort
+	-E: exit after check
+	-I: init repository (must be run first)
 	-v: be verbose
+	-i: print out only info
 	-l: list files during backup
 	-d: only do dry run
-	-i: print out only info
 	-h: this help page
 
 	Version: ${VERSION}
@@ -74,10 +85,24 @@ function usage()
 }
 
 # set options
-while getopts ":c:vldih" opt; do
+while getopts ":c:vldiCEIh" opt; do
 	case "${opt}" in
 		c|config)
 			BASE_FOLDER=${OPTARG};
+			;;
+		C|Check)
+			# will check if repo is there and abort if not
+			CHECK=1;
+			;;
+		E|Exit)
+			# exit after check
+			EXIT=1;
+			;;
+		I|Init)
+			# will check if there is a repo and init it
+			# previoous this was default
+			CHECK=1;
+			INIT=1;
 			;;
 		v|verbose)
 			VERBOSE=1;
@@ -114,6 +139,12 @@ if [ ! -f "${BASE_FOLDER}${SETTINGS_FILE}" ]; then
 	exit 1;
 fi;
 
+# info -i && -C/-I cannot be run together
+if [ ${CHECK} -eq 1 ] || [ ${INIT} -eq 1 ] && [ ${INFO} -eq 1 ]; then
+	echo "Cannot have -i info option and -C check or -I initialized option at the same time";
+	exit 1;
+fi;
+
 # verbose & progress
 if [ ${VERBOSE} -eq 1 ]; then
 	OPT_VERBOSE="-v";
@@ -127,6 +158,15 @@ fi;
 
 # read config file
 . "${BASE_FOLDER}${SETTINGS_FILE}";
+
+# if force check is true set CHECK to 1unless INFO is 1
+# Needs bash 4.0 at lesat for this
+if [ "${FORCE_CHECK,,}" = "true" ] && [ ${INFO} -eq 0 ]; then
+	CHECK=1;
+	if [ ${DEBUG} -eq 1 ]; then
+		echo "Force repository check";
+	fi;
+fi;
 
 # remote borg path
 if [ ! -z "${TARGET_BORG_PATH}" ]; then
@@ -213,6 +253,73 @@ if [ -z "${BACKUP_SET}" ]; then
 		# default
 		BACKUP_SET="{now:%Y-%m-%d}";
 	fi;
+fi;
+
+# if the repository is not there, call init to create it
+# if this is user@host, we need to use ssh command to check if the file is there
+# else a normal check is ok
+# unless explicit given, check is skipped
+if [ ${CHECK} -eq 1 ] || [ ${INIT} -eq 1 ]; then
+	if [ ! -z "${TARGET_SERVER}" ]; then
+		if [ ${DEBUG} -eq 1 ]; then
+			echo "borg info ${OPT_REMOTE} ${REPOSITORY} 2>&1|grep \"Repository ID:\"";
+		fi;
+		# use borg info and check if it returns "Repository ID:" in the first line
+		REPO_CHECK=$(borg info ${OPT_REMOTE} ${REPOSITORY} 2>&1|grep "Repository ID:");
+		# this is currently a hack to work round the error code in borg info
+		# this checks if REPO_CHECK holds this error message and then starts init
+		regex="^Some part of the script failed with an error:";
+		if [[ -z "${REPO_CHECK}" ]] || [[ "${REPO_CHECK}" =~ ${regex} ]]; then
+			INIT_REPOSITORY=1;
+		fi;
+	elif [ ! -d "${REPOSITORY}" ]; then
+		INIT_REPOSITORY=1;
+	fi;
+	# if check but no init and repo is there but init file is missing set it
+	if [ ${CHECK} -eq 1 ] && [ ${INIT} -eq 0 ] && [ ${INIT_REPOSITORY} -eq 0 ] &&
+		[ ! -f "${BASE_FOLDER}${BACKUP_INIT_CHECK}" ]; then
+		# write init file
+		echo "Add missing init check file";
+		echo "$(date +%s)" > "${BASE_FOLDER}${BACKUP_INIT_CHECK}";
+	fi;
+	# end if checked but repository is not here
+	if [ ${CHECK} -eq 1 ] && [ ${INIT} -eq 0 ] && [ ${INIT_REPOSITORY} -eq 1 ]; then
+		echo "No repository. Please run with -I flag to initialze repository";
+		exit;
+	fi;
+	if [ ${EXIT} -eq 1 ] && [ ${CHECK} -eq 1 ] && [ ${INIT} -eq 0 ]; then
+		echo "Repository exists";
+		echo "For more information run:"
+		echo "borg info ${OPT_REMOTE} ${REPOSITORY}";
+		exit;
+	fi;
+fi;
+if [ ${INIT} -eq 1 ] && [ ${INIT_REPOSITORY} -eq 1 ]; then
+	if [ ${DEBUG} -eq 1 ]; then
+		echo "borg init ${OPT_REMOTE} -e ${ENCRYPTION} ${OPT_VERBOSE} ${REPOSITORY}";
+	else
+		# should trap and exit properly here
+		borg init ${OPT_REMOTE} -e ${ENCRYPTION} ${OPT_VERBOSE} ${REPOSITORY};
+		# write init file
+		echo "$(date +%s)" > "${BASE_FOLDER}${BACKUP_INIT_CHECK}";
+		echo "Repository initialized";
+		echo "For more information run:"
+		echo "borg info ${OPT_REMOTE} ${REPOSITORY}";
+	fi
+	# exit after init
+	exit;
+elif [ ${INIT} -eq 1 ] && [ ${INIT_REPOSITORY} -eq 0 ]; then
+	echo "Repository already initialized";
+	echo "For more information run:"
+	echo "borg info ${OPT_REMOTE} ${REPOSITORY}";
+	exit;
+fi;
+
+# check for init file
+if [ ! -f "${BASE_FOLDER}${BACKUP_INIT_CHECK}" ]; then
+	echo "It seems the repository has never been initialized."
+	echo "Please run -I to initialize or if already initialzed run with -C for init update."
+	exit;
 fi;
 
 # base command
@@ -339,32 +446,6 @@ if [ ${INFO} -eq 1 ]; then
 fi;
 
 if [ $FOLDER_OK -eq 1 ]; then
-	# if the repository is no there, call init to create it
-	# if this is user@host, we need to use ssh command to check if the file is there
-	# else a normal check is ok
-	if [ ! -z "${TARGET_SERVER}" ]; then
-		if [ ${DEBUG} -eq 1 ]; then
-			echo "borg info ${OPT_REMOTE} ${REPOSITORY} 2>&1|grep \"Repository ID:\"";
-		fi;
-		# use borg info and check if it returns "Repository ID:" in the first line
-		REPO_CHECK=$(borg info ${OPT_REMOTE} ${REPOSITORY} 2>&1|grep "Repository ID:");
-		# this is currently a hack to work round the error code in borg info
-		# this checks if REPO_CHECK holds this error message and then starts init
-		regex="^Some part of the script failed with an error:";
-		if [[ -z "${REPO_CHECK}" ]] || [[ "${REPO_CHECK}" =~ ${regex} ]]; then
-			INIT_REPOSITORY=1;
-		fi;
-	elif [ ! -d "${REPOSITORY}" ]; then
-		INIT_REPOSITORY=1;
-	fi;
-	if [ ${INIT_REPOSITORY} -eq 1 ]; then
-		if [ ${DEBUG} -eq 1 ]; then
-			echo "borg init ${OPT_REMOTE} -e ${ENCRYPTION} ${OPT_VERBOSE} ${REPOSITORY}";
-		else
-			# should trap and exit properly here
-			borg init ${OPT_REMOTE} -e ${ENCRYPTION} ${OPT_VERBOSE} ${REPOSITORY};
-		fi
-	fi;
 	# execute backup command
 	if [ ${DEBUG} -eq 1 ]; then
 		echo ${COMMAND};

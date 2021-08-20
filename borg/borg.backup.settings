@@ -22,11 +22,12 @@ COMPRESSION_LEVEL="";
 # Blank passwords allowed for only key (if used, use keyfile)
 # See: http://borgbackup.readthedocs.io/en/stable/faq.html#how-can-i-specify-the-encryption-passphrase-programmatically
 ENCRYPTION="none";
+# force repository check, default is off, set to true for check
+FORCE_CHECK="true";
 # default is %Y-%m-%d
 # todays date, if more than one per day add -%H%M for hour/minute
 # it can also be "{hostname}-{user}-{now:%Y-%m-%dT%H:%M:%S.%f}"
 BACKUP_SET="";
-# DATE=$(date +%Y-%m-%d);
 # post run cleanup times
 KEEP_DAYS=7;
 KEEP_WEEKS=4;
