@@ -15,7 +15,7 @@ cleanup() {
 }
 
 # set last edit date + time
-VERSION="20210819-0901";
+VERSION="20210820-1052";
 # creates borg backup based on the include/exclude files
 # if base borg folder (backup files) does not exist, it will automatically init it
 # base folder
@@ -29,6 +29,7 @@ BACKUP_INIT_CHECK="borg.backup.init";
 VERBOSE=0;
 LIST=0;
 DEBUG=0;
+DRYRUN=0;
 INFO=0;
 CHECK=0;
 INIT=0;
@@ -77,7 +78,8 @@ function usage()
 	-v: be verbose
 	-i: print out only info
 	-l: list files during backup
-	-d: only do dry run
+	-d: debug output all commands
+	-n: only do dry run
 	-h: this help page
 
 	Version: ${VERSION}
@@ -85,7 +87,7 @@ function usage()
 }
 
 # set options
-while getopts ":c:vldiCEIh" opt; do
+while getopts ":c:vldniCEIh" opt; do
 	case "${opt}" in
 		c|config)
 			BASE_FOLDER=${OPTARG};
@@ -115,6 +117,9 @@ while getopts ":c:vldiCEIh" opt; do
 			;;
 		d|debug)
 			DEBUG=1;
+			;;
+		n|dryrun)
+			DRYRUN=1;
 			;;
 		h|help)
 			usage;
@@ -158,6 +163,11 @@ fi;
 
 # read config file
 . "${BASE_FOLDER}${SETTINGS_FILE}";
+
+# if ENCRYPTION is empty or not in the valid list fall back to none
+if [ -z "${ENCRYPTION}" ]; then
+	ENCRYPTION="none";
+fi;
 
 # if force check is true set CHECK to 1unless INFO is 1
 # Needs bash 4.0 at lesat for this
@@ -254,7 +264,6 @@ if [ -z "${BACKUP_SET}" ]; then
 		BACKUP_SET="{now:%Y-%m-%d}";
 	fi;
 fi;
-
 # if the repository is not there, call init to create it
 # if this is user@host, we need to use ssh command to check if the file is there
 # else a normal check is ok
@@ -297,7 +306,7 @@ fi;
 if [ ${INIT} -eq 1 ] && [ ${INIT_REPOSITORY} -eq 1 ]; then
 	if [ ${DEBUG} -eq 1 ]; then
 		echo "borg init ${OPT_REMOTE} -e ${ENCRYPTION} ${OPT_VERBOSE} ${REPOSITORY}";
-	else
+	elif [ ${DRYRUN} -eq 0 ]; then
 		# should trap and exit properly here
 		borg init ${OPT_REMOTE} -e ${ENCRYPTION} ${OPT_VERBOSE} ${REPOSITORY};
 		# write init file
@@ -446,9 +455,12 @@ if [ ${INFO} -eq 1 ]; then
 fi;
 
 if [ $FOLDER_OK -eq 1 ]; then
-	# execute backup command
+	# show command
 	if [ ${DEBUG} -eq 1 ]; then
 		echo ${COMMAND};
+	fi;
+	# execute backup command
+	if [ ${DRYRUN} -eq 1 ]; then
 		PRUNE_DEBUG="--dry-run";
 	else
 		# need to redirect std error to std out so all data is printed to the correct pipe

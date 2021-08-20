@@ -18,12 +18,12 @@ COMPRESSION_LEVEL="";
 # encryption settings:
 # SHA-256: 'none', 'authenticated', 'repokey', 'keyfile'
 # BLAKE2b: 'authenticated-blake2', 'repokey-blake2', 'keyfile-blake2'
-# Note: none does not encrypt
+# Note: none or empty does not encrypt
 # Blank passwords allowed for only key (if used, use keyfile)
 # See: http://borgbackup.readthedocs.io/en/stable/faq.html#how-can-i-specify-the-encryption-passphrase-programmatically
-ENCRYPTION="none";
+ENCRYPTION="";
 # force repository check, default is off, set to true for check
-FORCE_CHECK="true";
+FORCE_CHECK="";
 # default is %Y-%m-%d
 # todays date, if more than one per day add -%H%M for hour/minute
 # it can also be "{hostname}-{user}-{now:%Y-%m-%dT%H:%M:%S.%f}"
