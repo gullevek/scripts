@@ -15,7 +15,11 @@ cleanup() {
 }
 
 # set last edit date + time
-VERSION="20210820-1409";
+VERSION="20210823-1012";
+# default log folder if none are set in config or option
+_LOG_FOLDER="/var/log/borg.backup/";
+# log file name is set based on BACKUP_FILE, .log is added
+LOG_FOLDER="";
 # creates borg backup based on the include/exclude files
 # if base borg folder (backup files) does not exist, it will automatically init it
 # base folder
@@ -35,20 +39,21 @@ CHECK=0;
 INIT=0;
 EXIT=0;
 # other variables
-TARGET_SERVER='';
-REGEX='';
+TARGET_SERVER="";
+REGEX="";
 REGEX_COMMENT="^[\ \t]*#";
 REGEX_GLOB='\*';
 REGEX_NUMERIC="^[0-9]$";
-PRUNE_DEBUG='';
+PRUNE_DEBUG="";
 INIT_REPOSITORY=0;
 FOLDER_OK=0;
-TMP_EXCLUDE_FILE='';
+TMP_EXCLUDE_FILE="";
 # opt flags
-OPT_VERBOSE='';
-OPT_PROGRESS='';
-OPT_LIST='';
-OPT_REMOTE='';
+OPT_VERBOSE="";
+OPT_PROGRESS="";
+OPT_LIST="";
+OPT_REMOTE="";
+OPT_LOG_FOLDER="";
 # config variables (will be overwritten from .settings file)
 TARGET_USER="";
 TARGET_HOST="";
@@ -77,13 +82,13 @@ KEEP_YEARS=1;
 # in the format of nY|M|d|h|m|s
 KEEP_WITHIN="";
 
-
 function usage()
 {
 	cat <<- EOT
 	Usage: ${0##/*/} [-c <config folder>] [-v] [-d]
 
 	-c <config folder>: if this is not given, ${BASE_FOLDER} is used
+	-L <log folder>: override config set and default log folder
 	-C: check if repository exists, if not abort
 	-E: exit after check
 	-I: init repository (must be run first)
@@ -99,10 +104,13 @@ function usage()
 }
 
 # set options
-while getopts ":c:vldniCEIh" opt; do
+while getopts ":c:L:vldniCEIh" opt; do
 	case "${opt}" in
 		c|config)
-			BASE_FOLDER=${OPTARG};
+			BASE_FOLDER="${OPTARG}";
+			;;
+		L|log)
+			OPT_LOG_FOLDER="${OPTARG}";
 			;;
 		C|Check)
 			# will check if repo is there and abort if not
@@ -166,7 +174,6 @@ fi;
 if [ ${VERBOSE} -eq 1 ]; then
 	OPT_VERBOSE="-v";
 	OPT_PROGRESS="-p";
-	echo "Script version: ${VERSION}";
 fi;
 # list files
 if [ ${LIST} -eq 1 ]; then
@@ -175,6 +182,43 @@ fi;
 
 # read config file
 . "${BASE_FOLDER}${SETTINGS_FILE}";
+
+# error if the repository file still has the default name
+REGEX="^some\-prefix\-";
+if [[ "${BACKUP_FILE}" =~ ${REGEX} ]]; then
+	echo "The repository name still has the default prefix: ${BACKUP_FILE}";
+	exit 1;
+fi;
+
+# log file set and check
+# option folder overrides all other folders
+if [ ! -z "${OPT_LOG_FOLDER}" ]; then
+	LOG_FOLDER="${OPT_LOG_FOLDER}";
+fi;
+# if empty folder set to default folder
+if [ -z "${LOG_FOLDER}" ]; then
+	LOG_FOLDER="${_LOG_FOLDER}";
+fi;
+# if this fails, it will throw an error message
+if [ ! -d "${LOG_FOLDER}" ]; then
+	mkdir "${LOG_FOLDER}";
+fi;
+# set the output log folder
+LOG="${LOG_FOLDER}/${BACKUP_FILE}.log";
+# fail if not writeable to folder or file
+if [[ -f "${LOG}" && ! -w "${LOG}" ]] || [[ ! -f "${LOG}" && ! -w "${LOG_FOLDER}" ]]; then
+	echo "Log folder or log file is not writeable: ${LOG}";
+	exit 1;
+fi;
+# start logging from here
+exec &> >(tee -a "${LOG}");
+echo "=== [START : $(date +'%F %T')] ===========================================>";
+
+# if we have info on and also verbose we do not show version info here but
+# below in the inf block
+if [ ${VERBOSE} -eq 1 ] && [ ${INFO} -eq 0 ]; then
+	echo "Script version: ${VERSION}";
+fi;
 
 # if ENCRYPTION is empty or not in the valid list fall back to none
 if [ -z "${ENCRYPTION}" ]; then
@@ -198,7 +242,7 @@ if [ ! -z "${TARGET_BORG_PATH}" ]; then
 fi;
 
 if [ -z "${TARGET_FOLDER}" ]; then
-	echo "No target folder has been set yet";
+	echo "[! $(date +'%F %T')] No target folder has been set yet";
 	exit 1;
 else
 	# This does not care for multiple trailing or leading slashes
@@ -230,14 +274,7 @@ fi;
 REPOSITORY=${TARGET_SERVER}${TARGET_FOLDER}${BACKUP_FILE};
 
 if [ ! -f "${BASE_FOLDER}${INCLUDE_FILE}" ]; then
-	echo "The include folder file ${INCLUDE_FILE} is missing";
-	exit 1;
-fi;
-
-# error if the repository file still has the default name
-REGEX="^some\-prefix\-";
-if [[ "${BACKUP_FILE}" =~ ${REGEX} ]]; then
-	echo "The repository name still has the default prefix: ${BACKUP_FILE}";
+	echo "[! $(date +'%F %T')] The include folder file ${INCLUDE_FILE} is missing";
 	exit 1;
 fi;
 
@@ -250,14 +287,14 @@ if [ ! -z "${COMPRESSION}" ]; then
 		# ignore it if this is lz4
 		if [ ! -z "${COMPRESSION_LEVEL}" ] && [ "${COMPRESSION}" != "lz4" ]; then
 			if ! [[ "${COMPRESSION_LEVEL}" =~ ${REGEX_NUMERIC} ]]; then
-				echo "Compression level needs to be a value from 0 to 9: ${COMPRESSION_LEVEL}";
+				echo "[! $(date +'%F %T')] Compression level needs to be a value from 0 to 9: ${COMPRESSION_LEVEL}";
 				exit 1;
 			else
 				OPT_COMPRESSION=${OPT_COMPRESSION}","${COMPRESSION_LEVEL};
 			fi;
 		fi;
 	else
-		echo "Compress setting need to be lz4, zlib or lzma. Or empty for no compression: ${COMPRESSION}";
+		echo "[! $(date +'%F %T')] Compress setting need to be lz4, zlib or lzma. Or empty for no compression: ${COMPRESSION}";
 		exit 1;
 	fi;
 fi;
@@ -306,13 +343,13 @@ if [ ! -z "${KEEP_WITHIN}" ]; then
 			BACKUP_SET_CHECK=1;
 		fi;
 	else
-		echo "KEEP_WITHIN has invalid string.";
+		echo "[! $(date +'%F %T')] KEEP_WITHIN has invalid string.";
 		exit 1;
 	fi;
 fi;
 # abort if KEEP_OPTIONS is empty
 if [ -z "${KEEP_OPTIONS}" ]; then
-	echo "It seems no KEEP_* entries where set in a valid format.";
+	echo "[! $(date +'%F %T')] It seems no KEEP_* entries where set in a valid format.";
 	exit 1;
 fi;
 # remove the first , (first character)
@@ -339,6 +376,7 @@ fi;
 # else a normal check is ok
 # unless explicit given, check is skipped
 if [ ${CHECK} -eq 1 ] || [ ${INIT} -eq 1 ]; then
+	echo "--- [CHECK : $(date +'%F %T')] ------------------------------------------->";
 	if [ ! -z "${TARGET_SERVER}" ]; then
 		if [ ${DEBUG} -eq 1 ]; then
 			echo "borg info ${OPT_REMOTE} ${REPOSITORY} 2>&1|grep \"Repository ID:\"";
@@ -363,17 +401,19 @@ if [ ${CHECK} -eq 1 ] || [ ${INIT} -eq 1 ]; then
 	fi;
 	# end if checked but repository is not here
 	if [ ${CHECK} -eq 1 ] && [ ${INIT} -eq 0 ] && [ ${INIT_REPOSITORY} -eq 1 ]; then
-		echo "No repository. Please run with -I flag to initialze repository";
+		echo "[! $(date +'%F %T')] No repository. Please run with -I flag to initialze repository";
 		exit 1;
 	fi;
 	if [ ${EXIT} -eq 1 ] && [ ${CHECK} -eq 1 ] && [ ${INIT} -eq 0 ]; then
 		echo "Repository exists";
 		echo "For more information run:"
 		echo "borg info ${OPT_REMOTE} ${REPOSITORY}";
+		echo "=== [END  : $(date +'%F %T')] ============================================>";
 		exit;
 	fi;
 fi;
 if [ ${INIT} -eq 1 ] && [ ${INIT_REPOSITORY} -eq 1 ]; then
+	echo "--- [INIT  : $(date +'%F %T')] ------------------------------------------->";
 	if [ ${DEBUG} -eq 1 ]; then
 		echo "borg init ${OPT_REMOTE} -e ${ENCRYPTION} ${OPT_VERBOSE} ${REPOSITORY}";
 	elif [ ${DRYRUN} -eq 0 ]; then
@@ -385,10 +425,11 @@ if [ ${INIT} -eq 1 ] && [ ${INIT_REPOSITORY} -eq 1 ]; then
 		echo "For more information run:"
 		echo "borg info ${OPT_REMOTE} ${REPOSITORY}";
 	fi
+	echo "=== [END  : $(date +'%F %T')] ============================================>";
 	# exit after init
 	exit;
 elif [ ${INIT} -eq 1 ] && [ ${INIT_REPOSITORY} -eq 0 ]; then
-	echo "Repository already initialized";
+	echo "[! $(date +'%F %T')] Repository already initialized";
 	echo "For more information run:"
 	echo "borg info ${OPT_REMOTE} ${REPOSITORY}";
 	exit 1;
@@ -396,7 +437,7 @@ fi;
 
 # check for init file
 if [ ! -f "${BASE_FOLDER}${BACKUP_INIT_CHECK}" ]; then
-	echo "It seems the repository has never been initialized."
+	echo "[! $(date +'%F %T')] It seems the repository has never been initialized."
 	echo "Please run -I to initialize or if already initialzed run with -C for init update."
 	exit 1;
 fi;
@@ -513,18 +554,25 @@ fi;
 
 # if info print info and then abort run
 if [ ${INFO} -eq 1 ]; then
+	echo "--- [INFO  : $(date +'%F %T')] ------------------------------------------->";
 	echo "Script version: ${VERSION}";
 	echo "borg info ${OPT_REMOTE} ${REPOSITORY}";
-	echo "Run command: ";
-	echo "${COMMAND}";
+	if [ $FOLDER_OK -eq 1 ]; then
+		echo "Run command: ";
+		echo "${COMMAND}";
+	else
+		echo "[!] No folders where set for the backup";
+	fi;
 	# remove the temporary exclude file if it exists
 	if [ -f "${TMP_EXCLUDE_FILE}" ]; then
 		rm -f "${TMP_EXCLUDE_FILE}";
 	fi;
+	echo "=== [END  : $(date +'%F %T')] ============================================>";
 	exit;
 fi;
 
 if [ $FOLDER_OK -eq 1 ]; then
+	echo "--- [BACKUP: $(date +'%F %T')] ------------------------------------------->";
 	# show command
 	if [ ${DEBUG} -eq 1 ]; then
 		echo ${COMMAND};
@@ -541,15 +589,18 @@ if [ $FOLDER_OK -eq 1 ]; then
 		rm -f "${TMP_EXCLUDE_FILE}";
 	fi;
 else
-	echo "No folders where set for the backup";
+	echo "[! $(date +'%F %T')] No folders where set for the backup";
 	exit 1;
 fi;
 
 # clean up, always verbose
+echo "--- [PRUNE : $(date +'%F %T')] ------------------------------------------->";
 echo "Prune repository with keep${KEEP_INFO}";
 if [ ${DEBUG} -eq 1 ]; then
 	echo "borg prune ${OPT_REMOTE} -v -s --list ${PRUNE_DEBUG} ${REPOSITORY} ${KEEP_OPTIONS}";
 fi;
 borg prune ${OPT_REMOTE} -v -s --list ${PRUNE_DEBUG} ${REPOSITORY} ${KEEP_OPTIONS} 2>&1 || echo "[!] Attic prune aborted";
+
+echo "=== [END  : $(date +'%F %T')] ============================================>";
 
 ## END

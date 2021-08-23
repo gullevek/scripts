@@ -1,5 +1,7 @@
 # Borg backup wrapper scripts settings
 
+# set log folder, if empty default will be used (/var/log/borg.backup)
+LOG_FOLDER="";
 # SSH user, host, port
 # if ssh config is set only host needs to be filled
 TARGET_USER="";
@@ -28,7 +30,8 @@ FORCE_CHECK="";
 # todays date, if more than one per day add -%H%M for hour/minute
 # it can also be "{hostname}-{user}-{now:%Y-%m-%dT%H:%M:%S.%f}"
 BACKUP_SET="";
-# post run cleanup times
+# prune times, how many are kept in each time frame
 KEEP_DAYS=7;
 KEEP_WEEKS=4;
 KEEP_MONTHS=6;
+KEEP_YEARS=1;
