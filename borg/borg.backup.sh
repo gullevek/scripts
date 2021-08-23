@@ -61,7 +61,7 @@ TARGET_PORT="";
 TARGET_BORG_PATH="";
 TARGET_FOLDER="";
 BACKUP_FILE="";
-COMPRESSION="";
+COMPRESSION="zlib";
 COMPRESSION_LEVEL="";
 ENCRYPTION="none";
 FORCE_CHECK="false";
@@ -183,10 +183,22 @@ fi;
 # read config file
 . "${BASE_FOLDER}${SETTINGS_FILE}";
 
+# backup file must be set
+if [ -z "${BACKUP_FILE}" ]; then
+	echo "No BACKUP_FILE set";
+	exit;
+fi;
+# backup file (folder) must end as .borg
+REGEX="\.borg$";
+if ! [[ "${BACKUP_FILE}" =~ ${REGEX} ]]; then
+	echo "BACKUP_FILE ${BACKUP_FILE} must end with .borg";
+	exit 1;
+fi;
 # error if the repository file still has the default name
+# This is just for old sets
 REGEX="^some\-prefix\-";
 if [[ "${BACKUP_FILE}" =~ ${REGEX} ]]; then
-	echo "The repository name still has the default prefix: ${BACKUP_FILE}";
+	echo "[DEPRECATED] The repository name still has the default prefix: ${BACKUP_FILE}";
 	exit 1;
 fi;
 

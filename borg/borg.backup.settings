@@ -11,8 +11,8 @@ TARGET_PORT="";
 TARGET_BORG_PATH="";
 # folder where the backup folder will be created
 TARGET_FOLDER="";
-# the backup file (folder) for this host
-BACKUP_FILE="some-prefix-"`hostname`".borg";
+# the backup file (folder) for this host $(hostname), must end with .borg
+BACKUP_FILE="";
 # compression settings (empty for none, lz4, zlib, lzma)
 # level, if empty then default, else number between 0 and 9
 COMPRESSION="zlib";
