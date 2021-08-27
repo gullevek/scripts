@@ -1,19 +1,6 @@
 #!/bin/bash
 
 set -e -u -o pipefail
-# setup log before everything else
-LOG='/var/log/pg_db_dump_file.log';
-# if this is not a root user or file is not accessable we fall back to pwd
-# if this is still not writeable, then fall back to $HOME
-if [[ -f "${LOG}" && ! -w "${LOG}" ]] || [[ ! -f "${LOG}" && ! -w "/var/log" ]]; then
-	LOG="$(pwd)/pg_db_dump_file.log";
-
-	if [[ -f "${LOG}" && ! -w "${LOG}" ]] || [[ ! -f "${LOG}" && ! -w "$(pwd)" ]]; then
-		LOG="${HOME}/pg_db_dump_file.log";
-	fi;
-fi;
-# log to file and also write to stdout
-exec &> >(tee -a "${LOG}");
 
 # dumps all the databases in compressed (custom) format
 # EXCLUDE: space seperated list of database names to be skipped
@@ -24,7 +11,7 @@ exec &> >(tee -a "${LOG}");
 function usage ()
 {
 	cat <<- EOT
-	Usage: ${0##/*/} [-t] [-s] [-g] [-c] [-r|-a] [-k <number to keep>] [-n] [-b <path>] [-i <postgreSQL version>] [-d <dump database name> [-d ...]] [-e <exclude dump> [-e ...]] [-u <db user>] [-h <db host>] [-p <db port>] [-l <db password>]
+	Usage: ${0##/*/} [-t] [-s] [-g] [-c] [-r|-a] [-k <number to keep>] [-n] [-b <path>] [-i <postgreSQL version>] [-d <dump database name> [-d ...]] [-e <exclude dump> [-e ...]] [-u <db user>] [-h <db host>] [-p <db port>] [-l <db password>] [-L <log path>]
 
 	-t: test usage, no real backup is done
 	-s: turn ON ssl mode, default mode is off
@@ -42,13 +29,16 @@ function usage ()
 	-l <db password>: default password is empty
 	-r: use redhat base paths instead of debian
 	-a: use amazon base paths instead of debian
+	-L <log path>: where to put the dump log file, if not set tries to use PostgreSQL log folder
 	EOT
 }
 
 TEST=0; # if set to 1 will run script without doing anything
 SSLMODE='disable';
 GLOBALS=1; # if set to 0 will not dump globals
-KEEP=3; # in days, keeps KEEP+1 files, today + KEEP days before, or keep number of files if CLEAN_NUMBER is true
+# in days, keeps KEEP+1 files, today + KEEP days before
+# or keep number of files if CLEAN_NUMBER is true, then it can't be 0
+KEEP=3;
 CLEAN_NUMBER=0;
 BACKUPDIR='';
 DB_VERSION='';
@@ -63,6 +53,10 @@ PRE_RUN_CLEAN_UP=0;
 SET_IDENT=0;
 PORT_REGEX="^[0-9]{4,5}$";
 OPTARG_REGEX="^-";
+# log path
+LOG_PATH='';
+# base path for PostgreSQL binary
+DBPATH_BASE='';
 # defaults
 _BACKUPDIR='/mnt/backup/db_dumps_fc/';
 _DB_VERSION=$(pgv=$(pg_dump --version| grep "pg_dump" | cut -d " " -f 3); if [[ $(echo "${pgv}" | cut -d "." -f 1) -ge 10 ]]; then echo "${pgv}" | cut -d "." -f 1; else echo "${pgv}" | cut -d "." -f 1,2; fi);
@@ -78,7 +72,7 @@ CONN_DB_HOST='';
 ERROR=0;
 
 # set options
-while getopts ":ctsgnk:b:i:d:e:u:h:p:l:ram" opt; do
+while getopts ":ctsgnk:b:i:d:e:u:h:p:l:L:ram" opt; do
 	# pre test for unfilled
 	if [ "${opt}" = ":" ] || [[ "${OPTARG-}" =~ ${OPTARG_REGEX} ]]; then
 		if [ "${opt}" = ":" ]; then
@@ -123,6 +117,10 @@ while getopts ":ctsgnk:b:i:d:e:u:h:p:l:ram" opt; do
 				echo "-e needs a database name";
 				ERROR=1;
 				;;
+			L)
+				echo "-L needs a log path";
+				ERROR=1;
+				;;
 		esac
 	fi;
 	# set options
@@ -147,7 +145,7 @@ while getopts ":ctsgnk:b:i:d:e:u:h:p:l:ram" opt; do
 			;;
 		b|backuppath)
 			if [ -z "${BACKUPDIR}" ]; then
-				BACKUPDIR=${OPTARG};
+				BACKUPDIR="${OPTARG}";
 			fi;
 			;;
 		i|ident)
@@ -194,6 +192,11 @@ while getopts ":ctsgnk:b:i:d:e:u:h:p:l:ram" opt; do
 		a|amazon)
 			AMAZON=1;
 			;;
+		L|logpath)
+			if [ ! -z "{$LOG_PATH}" ]; then
+				LOG_PATH="${OPTARG}";
+			fi;
+			;;
 		m|manual)
 			usage;
 			exit 0;
@@ -218,6 +221,12 @@ if [ "${REDHAT}" -eq 1 ] && [ "${AMAZON}" -eq 1 ]; then
 	exit 0;
 fi;
 
+# if we have numeric keep and keep number is set to 0 abort
+if [ ${CLEAN_NUMBER} -eq 1 ] && [ ${KEEP} -lt 1 ]; then
+	echo "If keep in numbers is on, keep must be at least 1 or higher";
+	exit 0;
+fi;
+
 # set the defaults
 for name in BACKUPDIR DB_VERSION DB_USER DB_PASSWD DB_HOST DB_PORT EXCLUDE INCLUDE; do
 	# assign it to the real name if the real name is empty
@@ -227,6 +236,35 @@ for name in BACKUPDIR DB_VERSION DB_USER DB_PASSWD DB_HOST DB_PORT EXCLUDE INCLU
 		eval ${name}=\${!default};
 	fi;
 done;
+
+# check base paths depending on installation and set log file
+if [ "${REDHAT}" -eq 1 ]; then
+	# Redhat base path (for non official ones would be '/usr/pgsql-'
+	# This is also for Amazon NEWER (after 9.6)
+	PG_BASE_PATH="/usr/pgsql-";
+	# I assume that as default
+	LOG_PATH="/var/lib/pgsql/${DB_VERSION}/data/log/";
+elif [ "${AMAZON}" -eq 1 ]; then
+	# only older 9.6 or before
+	PG_BASE_PATH="/usr/lib64/pgsql";
+	# LOG PATH, will be attached to DB VERSION
+	LOG_PATH="/var/lib/pgsql${DB_VERSION}/data/pg_log";
+else
+	# Debian base path
+	PG_BASE_PATH="/usr/lib/postgresql/";
+	LOG_PATH="/var/log/postgresql/";
+fi;
+
+# setup log before everything else
+LOG="${LOG_PATH}pg_db_dump_file.log";
+# if we cannot write to the log file abort
+if [[ -f "${LOG}" && ! -w "${LOG}" ]] || [[ ! -f "${LOG}" && ! -w "${LOG_PATH}" ]]; then
+	echo "Cannot write to ${LOG} or create a new log file in ${LOG_PATH}";
+	exit;
+fi;
+# log to file and also write to stdout
+exec &> >(tee -a "${LOG}");
+
 # check DB port is valid number
 if ! [[ "${DB_PORT}" =~ ${PORT_REGEX} ]]; then
 	echo "The port needs to be a valid number: ${_port}";
@@ -248,16 +286,7 @@ else
 	CONN_DB_HOST='-h '${DB_HOST};
 fi;
 
-if [ "${REDHAT}" -eq 1 ]; then
-	# Redhat base path (for non official ones would be '/usr/pgsql-'
-	PG_BASE_PATH='/usr/pgsql-';
-elif [ "${AMAZON}" -eq 1 ]; then
-	PG_BASE_PATH='/usr/lib64/pgsql';
-else
-	# Debian base path
-	PG_BASE_PATH='/usr/lib/postgresql/';
-fi;
-
+# set the binaries we need
 PG_PATH=${PG_BASE_PATH}${DB_VERSION}'/bin/';
 PG_PSQL=${PG_PATH}'psql';
 PG_DUMP=${PG_PATH}'pg_dump';
@@ -347,7 +376,9 @@ function convert_time
 			time_string=${time_string}${output[$i]}${timenames[$i]};
 		fi;
 	done;
-	if [ ! -z ${ms} ]; then
+	# milliseconds must be filled, but we also check that they are non "nan" string
+	# that can appear in the original value
+	if [ ! -z ${ms} ] && [ "${ms}" != "nan" ]; then
 		if [ ${ms} -gt 0 ]; then
 			time_string=${time_string}" "${ms}"ms";
 		fi;
@@ -420,7 +451,8 @@ function get_dump_file_name
 # PARAMS: none
 # RETURN: none
 # CALLS : var=$(get_dump_databases)
-# DESC  : this is needd only for clean up run if the clean up is run before the actually database dump
+# DESC  : this is needd only for clean up run if the clean up is run before
+#         the actually database dump
 #         fills up the global search names aray
 function get_dump_databases
 {
@@ -436,12 +468,14 @@ function get_dump_databases
 		for excl_db in ${EXCLUDE}; do
 			if [ "${db}" = "${excl_db}" ]; then
 				exclude=1;
+				break;
 			fi;
 		done;
 		if [ ! -z "${INCLUDE}" ]; then
 			for incl_db in ${INCLUDE}; do
 				if [ "${db}" = "${incl_db}" ]; then
 					include=1;
+					break;
 				fi;
 			done;
 		else
@@ -465,8 +499,11 @@ function clean_up
 			echo "Cleanup older than ${KEEP} days backup in ${BACKUPDIR}";
 		else
 			echo "Cleanup up, keep only ${KEEP} backups in ${BACKUPDIR}";
-			# for count check we need to have +1 in keep for numeric
-			let KEEP=${KEEP}+1;
+			# if we run clean before backup, we need to clean up +1
+			# so if we keep one, we must remove all data before running new
+			if [ ${PRE_RUN_CLEAN_UP} -eq 1 ]; then
+				let KEEP=${KEEP}-1;
+			fi;
 		fi;
 		# build the find string based on the search names patter
 		find_string='';
@@ -480,22 +517,26 @@ function clean_up
 				find_string=${find_string}"-mtime +${KEEP} -name "${name}${DB_TYPE}*.sql" -type f -delete -print";
 				echo "- Remove old backups for '${name}'";
 			else
-				# if we do number based delete of old data, but only if the number of files is bigger than the keep number or equal if we do PRE_RUN_CLEAN_UP
+				# if we do number based delete of old data, but only if the number of
+				# files is bigger than the keep number or equal if we do PRE_RUN_CLEAN_UP
 				# this can be error, but we allow it -> script should not abort here
-				count=$(ls ${BACKUPDIR}"/"${name}${DB_TYPE}*.sql | wc -l) || true;
+				# note we have a wildcard in the name, so we can't put that into ""
+				count=$(ls "${BACKUPDIR}/"${name}${DB_TYPE}*.sql 2>/dev/null | wc -l) || true;
 				if [ ${PRE_RUN_CLEAN_UP} -eq 1 ]; then
 					let count=${count}+1;
 				fi;
 				if [ ${count} -gt ${KEEP} ]; then
 					# calculate the amount to delete
 					# eg if we want to keep 1, and we have 3 files then we need to delete 2
-					# keep is always +1 (include the to backup count). count is +1 if we do a pre-run cleanup
+					# keep is always +1 (include the to backup count).
+					# count is +1 if we do a pre-run cleanup
+					# grouped by db name, db type
 					let TO_DELETE=${count}-${KEEP};
 					echo "- Remove old backups for '${name}', found ${count}, will delete ${TO_DELETE}";
 					if [ ${TEST} -eq 0 ]; then
-						ls -tr ${BACKUPDIR}/${name}${DB_TYPE}*.sql|head -n ${TO_DELETE}|xargs rm;
+						ls -tr "${BACKUPDIR}/"${name}${DB_TYPE}*.sql 2>/dev/null | head -n ${TO_DELETE} | xargs rm;
 					else
-						echo "ls -tr ${BACKUPDIR}/${name}${DB_TYPE}*.sql|head -n ${TO_DELETE}|xargs rm";
+						echo "ls -tr ${BACKUPDIR}/${name}${DB_TYPE}*.sql 2>/dev/null | head -n ${TO_DELETE} | xargs rm";
 					fi;
 				fi;
 			fi;
@@ -569,12 +610,14 @@ for owner_db in $(${PG_PSQL} -U ${DB_USER} ${CONN_DB_HOST} -p ${DB_PORT} -d temp
 	for excl_db in ${EXCLUDE}; do
 		if [ "${db}" = "${excl_db}" ]; then
 			exclude=1;
+			break;
 		fi;
 	done;
 	if [ ! -z "${INCLUDE}" ]; then
 		for incl_db in ${INCLUDE}; do
 			if [ "${db}" = "${incl_db}" ]; then
 				include=1;
+				break;
 			fi;
 		done;
 	else
