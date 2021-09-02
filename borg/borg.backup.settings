@@ -1,5 +1,7 @@
 # Borg backup wrapper scripts settings
 
+# NOTE: ALL FOLDERS MUST BE ABSOLUTE WITH NO ~/ AT THE BEGINNING
+
 # set log folder, if empty default will be used (/var/log/borg.backup)
 LOG_FOLDER="";
 # SSH user, host, port

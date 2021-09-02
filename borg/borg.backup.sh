@@ -10,12 +10,16 @@ trap cleanup SIGINT SIGTERM ERR
 cleanup() {
 	# script cleanup here
 	echo "Some part of the script failed with an error: $? @LINE: $(caller)";
+	# unset exported vars
+	unset BORG_BASE_DIR BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK BORG_RELOCATED_REPO_ACCESS_IS_OK;
 	# end trap
 	trap - SIGINT SIGTERM ERR
 }
+# on exit unset any exported var
+trap "unset BORG_BASE_DIR BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK BORG_RELOCATED_REPO_ACCESS_IS_OK" EXIT;
 
 # set last edit date + time
-VERSION="20210823-1012";
+VERSION="20210902-1118";
 # default log folder if none are set in config or option
 _LOG_FOLDER="/var/log/borg.backup/";
 # log file name is set based on BACKUP_FILE, .log is added
@@ -38,6 +42,9 @@ INFO=0;
 CHECK=0;
 INIT=0;
 EXIT=0;
+# flags, set to no to disable
+_BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK="yes";
+_BORG_RELOCATED_REPO_ACCESS_IS_OK="yes";
 # other variables
 TARGET_SERVER="";
 REGEX="";
@@ -107,10 +114,10 @@ function usage()
 while getopts ":c:L:vldniCEIh" opt; do
 	case "${opt}" in
 		c|config)
-			BASE_FOLDER="${OPTARG}";
+			BASE_FOLDER=${OPTARG};
 			;;
 		L|log)
-			OPT_LOG_FOLDER="${OPTARG}";
+			OPT_LOG_FOLDER=${OPTARG};
 			;;
 		C|Check)
 			# will check if repo is there and abort if not
@@ -157,10 +164,16 @@ while getopts ":c:L:vldniCEIh" opt; do
 done;
 
 # add trailing slasd for base folder
-[[ "${BASE_FOLDER}" != */ ]] && BASE_FOLDER="${BASE_FOLDER}/";
-
-if [ ! -f "${BASE_FOLDER}${SETTINGS_FILE}" ]; then
+[[ "${BASE_FOLDER}" != */ ]] && BASE_FOLDER=${BASE_FOLDER}"/";
+# quote base folder
+BASE_FOLDER=$(printf "%q" ${BASE_FOLDER});
+# must have settings file there, if not, abort early
+if [ ! -f ${BASE_FOLDER}${SETTINGS_FILE} ]; then
 	echo "No settings file could be found: ${BASE_FOLDER}${SETTINGS_FILE}";
+	exit 1;
+fi;
+if [ ! -w ${BASE_FOLDER} ]; then
+	echo "Cannot write to BASE_FOLDER ${BASE_FOLDER}";
 	exit 1;
 fi;
 
@@ -181,7 +194,21 @@ if [ ${LIST} -eq 1 ]; then
 fi;
 
 # read config file
-. "${BASE_FOLDER}${SETTINGS_FILE}";
+. ${BASE_FOLDER}${SETTINGS_FILE};
+
+# check LOG_FOLDER, TARGET_BORG_PATH, TARGET_FOLDER must have no ~/ as start position
+if [[ ${LOG_FOLDER} =~ ^~\/ ]]; then
+	echo "LOG_FOLDER path cannot start with ~/. Path must be absolute: ${LOG_FOLDER}";
+	exit 1;
+fi;
+if [[ ${TARGET_BORG_PATH} =~ ^~\/ ]]; then
+	echo "TARGET_BORG_PATH path cannot start with ~/. Path must be absolute: ${TARGET_BORG_PATH}";
+	exit 1;
+fi;
+if [[ ${TARGET_FOLDER} =~ ^~\/ ]]; then
+	echo "TARGET_FOLDER path cannot start with ~/. Path must be absolute: ${TARGET_FOLDER}";
+	exit 1;
+fi;
 
 # backup file must be set
 if [ -z "${BACKUP_FILE}" ]; then
@@ -189,9 +216,15 @@ if [ -z "${BACKUP_FILE}" ]; then
 	exit;
 fi;
 # backup file (folder) must end as .borg
-REGEX="\.borg$";
-if ! [[ "${BACKUP_FILE}" =~ ${REGEX} ]]; then
-	echo "BACKUP_FILE ${BACKUP_FILE} must end with .borg";
+# REGEX="\.borg$";
+# if ! [[ "${BACKUP_FILE}" =~ ${REGEX} ]]; then
+# 	echo "BACKUP_FILE ${BACKUP_FILE} must end with .borg";
+# 	exit 1;
+# fi;
+# BACKUP FILE also cannot start with / or have / inside or start with ~
+# valid file name check, alphanumeric, -,._ ...
+if ! [[ "${BACKUP_FILE}" =~ ^[A-Za-z0-9,._-]+\.borg$ ]]; then
+	echo "BACKUP_FILE ${BACKUP_FILE} can only contain A-Z a-z 0-9 , . _ - chracters and must end with .borg";
 	exit 1;
 fi;
 # error if the repository file still has the default name
@@ -205,32 +238,32 @@ fi;
 # log file set and check
 # option folder overrides all other folders
 if [ ! -z "${OPT_LOG_FOLDER}" ]; then
-	LOG_FOLDER="${OPT_LOG_FOLDER}";
+	LOG_FOLDER=${OPT_LOG_FOLDER};
 fi;
 # if empty folder set to default folder
 if [ -z "${LOG_FOLDER}" ]; then
-	LOG_FOLDER="${_LOG_FOLDER}";
+	LOG_FOLDER=${_LOG_FOLDER};
 fi;
+# escape for folder exists test and folder creation
+__LOG_FOLDER=$(printf "%q" ${LOG_FOLDER});
 # if this fails, it will throw an error message
-if [ ! -d "${LOG_FOLDER}" ]; then
-	mkdir "${LOG_FOLDER}";
+if [ ! -d $__LOG_FOLDER ]; then
+	mkdir ${__LOG_FOLDER};
 fi;
 # set the output log folder
-LOG="${LOG_FOLDER}/${BACKUP_FILE}.log";
+LOG=$(printf "%q" ${LOG_FOLDER}"/"${BACKUP_FILE}".log");
 # fail if not writeable to folder or file
-if [[ -f "${LOG}" && ! -w "${LOG}" ]] || [[ ! -f "${LOG}" && ! -w "${LOG_FOLDER}" ]]; then
+if [[ -f ${LOG} && ! -w ${LOG} ]] || [[ ! -f ${LOG} && ! -w ${__LOG_FOLDER} ]]; then
 	echo "Log folder or log file is not writeable: ${LOG}";
 	exit 1;
 fi;
 # start logging from here
-exec &> >(tee -a "${LOG}");
+exec &> >(tee -a ${LOG});
 echo "=== [START : $(date +'%F %T')] ===========================================>";
-
-# if we have info on and also verbose we do not show version info here but
-# below in the inf block
-if [ ${VERBOSE} -eq 1 ] && [ ${INFO} -eq 0 ]; then
-	echo "Script version: ${VERSION}";
-fi;
+# show info for version always
+echo "Script version: ${VERSION}";
+# show base folder always
+echo "Base folder   : ${BASE_FOLDER}";
 
 # if ENCRYPTION is empty or not in the valid list fall back to none
 if [ -z "${ENCRYPTION}" ]; then
@@ -285,7 +318,7 @@ elif [ ! -z "${TARGET_HOST}" ]; then
 fi;
 REPOSITORY=${TARGET_SERVER}${TARGET_FOLDER}${BACKUP_FILE};
 
-if [ ! -f "${BASE_FOLDER}${INCLUDE_FILE}" ]; then
+if [ ! -f ${BASE_FOLDER}${INCLUDE_FILE} ]; then
 	echo "[! $(date +'%F %T')] The include folder file ${INCLUDE_FILE} is missing";
 	exit 1;
 fi;
@@ -383,6 +416,20 @@ if [ ${BACKUP_SET_CHECK} -eq 1 ] && [[ "${BACKUP_SET}" != *"%H"* ]]; then
 	BACKUP_SET=$(echo "${BACKUP_SET}" | sed -e "s/}/T%H:%M:%S}/");
 fi;
 
+# general borg settings
+# set base path to config directory to keep cache/config separated
+export BORG_BASE_DIR=${BASE_FOLDER};
+# ignore non encrypted access
+export BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK=${_BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK};
+# ignore moved repo access
+export BORG_RELOCATED_REPO_ACCESS_IS_OK=${_BORG_RELOCATED_REPO_ACCESS_IS_OK};
+# and for debug print that tout
+if [ ${DEBUG} -eq 1 ]; then
+	echo "export BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK=${_BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK};";
+	echo "export BORG_RELOCATED_REPO_ACCESS_IS_OK=${_BORG_RELOCATED_REPO_ACCESS_IS_OK};";
+	echo "export BORG_BASE_DIR=${BASE_FOLDER};";
+fi;
+
 # if the repository is not there, call init to create it
 # if this is user@host, we need to use ssh command to check if the file is there
 # else a normal check is ok
@@ -406,20 +453,21 @@ if [ ${CHECK} -eq 1 ] || [ ${INIT} -eq 1 ]; then
 	fi;
 	# if check but no init and repo is there but init file is missing set it
 	if [ ${CHECK} -eq 1 ] && [ ${INIT} -eq 0 ] && [ ${INIT_REPOSITORY} -eq 0 ] &&
-		[ ! -f "${BASE_FOLDER}${BACKUP_INIT_CHECK}" ]; then
+		[ ! -f ${BASE_FOLDER}${BACKUP_INIT_CHECK} ]; then
 		# write init file
 		echo "[!] Add missing init check file";
-		echo "$(date +%s)" > "${BASE_FOLDER}${BACKUP_INIT_CHECK}";
+		echo "$(date +%s)" > ${BASE_FOLDER}${BACKUP_INIT_CHECK};
 	fi;
 	# end if checked but repository is not here
 	if [ ${CHECK} -eq 1 ] && [ ${INIT} -eq 0 ] && [ ${INIT_REPOSITORY} -eq 1 ]; then
 		echo "[! $(date +'%F %T')] No repository. Please run with -I flag to initialze repository";
+		export -n BORG_BASE_DIR BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK BORG_RELOCATED_REPO_ACCESS_IS_OK;
 		exit 1;
 	fi;
 	if [ ${EXIT} -eq 1 ] && [ ${CHECK} -eq 1 ] && [ ${INIT} -eq 0 ]; then
 		echo "Repository exists";
 		echo "For more information run:"
-		echo "borg info ${OPT_REMOTE} ${REPOSITORY}";
+		echo "export BORG_BASE_DIR=${BASE_FOLDER};borg info ${OPT_REMOTE} ${REPOSITORY}";
 		echo "=== [END  : $(date +'%F %T')] ============================================>";
 		exit;
 	fi;
@@ -432,10 +480,10 @@ if [ ${INIT} -eq 1 ] && [ ${INIT_REPOSITORY} -eq 1 ]; then
 		# should trap and exit properly here
 		borg init ${OPT_REMOTE} -e ${ENCRYPTION} ${OPT_VERBOSE} ${REPOSITORY};
 		# write init file
-		echo "$(date +%s)" > "${BASE_FOLDER}${BACKUP_INIT_CHECK}";
+		echo "$(date +%s)" > ${BASE_FOLDER}${BACKUP_INIT_CHECK};
 		echo "Repository initialized";
 		echo "For more information run:"
-		echo "borg info ${OPT_REMOTE} ${REPOSITORY}";
+		echo "export BORG_BASE_DIR=${BASE_FOLDER};borg info ${OPT_REMOTE} ${REPOSITORY}";
 	fi
 	echo "=== [END  : $(date +'%F %T')] ============================================>";
 	# exit after init
@@ -443,12 +491,12 @@ if [ ${INIT} -eq 1 ] && [ ${INIT_REPOSITORY} -eq 1 ]; then
 elif [ ${INIT} -eq 1 ] && [ ${INIT_REPOSITORY} -eq 0 ]; then
 	echo "[! $(date +'%F %T')] Repository already initialized";
 	echo "For more information run:"
-	echo "borg info ${OPT_REMOTE} ${REPOSITORY}";
+	echo "export BORG_BASE_DIR=${BASE_FOLDER};borg info ${OPT_REMOTE} ${REPOSITORY}";
 	exit 1;
 fi;
 
 # check for init file
-if [ ! -f "${BASE_FOLDER}${BACKUP_INIT_CHECK}" ]; then
+if [ ! -f ${BASE_FOLDER}${BACKUP_INIT_CHECK} ]; then
 	echo "[! $(date +'%F %T')] It seems the repository has never been initialized."
 	echo "Please run -I to initialize or if already initialzed run with -C for init update."
 	exit 1;
@@ -508,9 +556,9 @@ while read include_folder; do
 			fi;
 		fi;
 	fi;
-done<"${BASE_FOLDER}${INCLUDE_FILE}";
+done<${BASE_FOLDER}${INCLUDE_FILE};
 # exclude list
-if [ -f "${BASE_FOLDER}${EXCLUDE_FILE}" ]; then
+if [ -f ${BASE_FOLDER}${EXCLUDE_FILE} ]; then
 	# check that the folders in that exclude file are actually valid, remove non valid ones and warn
 	#TMP_EXCLUDE_FILE=$(mktemp --tmpdir ${EXCLUDE_FILE}.XXXXXXXX); #non mac
 	TMP_EXCLUDE_FILE=$(mktemp ${BASE_FOLDER}${EXCLUDE_FILE}.XXXXXXXX);
@@ -560,18 +608,24 @@ if [ -f "${BASE_FOLDER}${EXCLUDE_FILE}" ]; then
 				fi;
 			fi;
 		fi;
-	done<"${BASE_FOLDER}${EXCLUDE_FILE}";
+	done<${BASE_FOLDER}${EXCLUDE_FILE};
 	COMMAND=${COMMAND}" --exclude-from ${TMP_EXCLUDE_FILE}";
 fi;
 
 # if info print info and then abort run
 if [ ${INFO} -eq 1 ]; then
 	echo "--- [INFO  : $(date +'%F %T')] ------------------------------------------->";
-	echo "Script version: ${VERSION}";
-	echo "borg info ${OPT_REMOTE} ${REPOSITORY}";
+	# show command on debug or dry run
+	if [ ${DEBUG} -eq 1 ] || [ ${DRYRUN} -eq 1 ]; then
+		echo "export BORG_BASE_DIR=${BASE_FOLDER};borg info ${OPT_REMOTE} ${REPOSITORY}";
+	fi;
+	# run info command if not a dry drun
+	if [ ${DRYRUN} -eq 0 ]; then
+		borg info ${OPT_REMOTE} ${REPOSITORY};
+	fi;
 	if [ $FOLDER_OK -eq 1 ]; then
-		echo "Run command: ";
-		echo "${COMMAND}";
+		echo "--- [Run command]:";
+		echo "export BORG_BASE_DIR=${BASE_FOLDER};${COMMAND}";
 	else
 		echo "[!] No folders where set for the backup";
 	fi;
