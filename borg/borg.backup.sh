@@ -19,7 +19,7 @@ cleanup() {
 trap "unset BORG_BASE_DIR BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK BORG_RELOCATED_REPO_ACCESS_IS_OK" EXIT;
 
 # set last edit date + time
-VERSION="20210902-1118";
+VERSION="20211014-0952";
 # default log folder if none are set in config or option
 _LOG_FOLDER="/var/log/borg.backup/";
 # log file name is set based on BACKUP_FILE, .log is added
@@ -44,6 +44,7 @@ INFO=0;
 CHECK=0;
 INIT=0;
 EXIT=0;
+PRINT=0;
 # flags, set to no to disable
 _BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK="yes";
 _BORG_RELOCATED_REPO_ACCESS_IS_OK="yes";
@@ -99,6 +100,7 @@ function usage()
 
 	-c <config folder>: if this is not given, ${BASE_FOLDER} is used
 	-L <log folder>: override config set and default log folder
+	-P: print list of archives created
 	-C: check if repository exists, if not abort
 	-E: exit after check
 	-I: init repository (must be run first)
@@ -114,7 +116,7 @@ function usage()
 }
 
 # set options
-while getopts ":c:L:vldniCEIh" opt; do
+while getopts ":c:L:vldniCEIPh" opt; do
 	case "${opt}" in
 		c|config)
 			BASE_FOLDER=${OPTARG};
@@ -135,6 +137,10 @@ while getopts ":c:L:vldniCEIh" opt; do
 			# previoous this was default
 			CHECK=1;
 			INIT=1;
+			;;
+		P|Print)
+			# use borg list to print list of archves
+			PRINT=1;
 			;;
 		v|verbose)
 			VERBOSE=1;
@@ -180,7 +186,12 @@ fi;
 
 # info -i && -C/-I cannot be run together
 if [ ${CHECK} -eq 1 ] || [ ${INIT} -eq 1 ] && [ ${INFO} -eq 1 ]; then
-	echo "Cannot have -i info option and -C check or -I initialized option at the same time";
+	echo "Cannot have -i info option and -C check or -I initialize option at the same time";
+	exit 1;
+fi;
+# print -P cannot be run with -i/-C/-I together
+if [ ${PRINT} -eq 1 ] || [ ${INIT} -eq 1 ] && [ ${CHECK} -eq 1 ] && [ ${INFO} -eq 1 ]; then
+	echo "Cannot have -P print option and -i info, -C check or -I initizalize option at the same time";
 	exit 1;
 fi;
 
@@ -333,6 +344,7 @@ elif [ ! -z "${TARGET_HOST}" ]; then
 fi;
 # we dont allow special characters, so we don't need to special escape it
 REPOSITORY="${TARGET_SERVER}${TARGET_FOLDER}${BACKUP_FILE}";
+echo "Repository    : ${REPOSITORY}";
 
 if [ ! -f "${BASE_FOLDER}${INCLUDE_FILE}" ]; then
 	echo "[! $(date +'%F %T')] The include folder file ${INCLUDE_FILE} is missing";
@@ -518,6 +530,34 @@ if [ ! -f "${BASE_FOLDER}${BACKUP_INIT_CHECK}" ]; then
 	echo "[! $(date +'%F %T')] It seems the repository has never been initialized."
 	echo "Please run -I to initialize or if already initialzed run with -C for init update."
 	exit 1;
+fi;
+
+# PRINT OUT current data, only do this if REPO exists
+if [ ${PRINT} -eq 1 ]; then
+	echo "--- [PRINT : $(date +'%F %T')] ------------------------------------------->";
+	FORMAT="{archive} {comment:6} {start} - {end} [{id}] ({username}@{hostname}){NL}"
+	# show command on debug or dry run
+	if [ ${DEBUG} -eq 1 ] || [ ${DRYRUN} -eq 1 ]; then
+		echo "export BORG_BASE_DIR=\"${BASE_FOLDER}\";borg list ${OPT_REMOTE} --format ${FORMAT} ${REPOSITORY}";
+	fi;
+	# run info command if not a dry drun
+	if [ ${DRYRUN} -eq 0 ]; then
+		borg list ${OPT_REMOTE} --format "${FORMAT}" ${REPOSITORY} ;
+	fi;
+	if [ ${VERBOSE} -eq 1 ]; then
+		echo "";
+		echo "Base command info:"
+		echo "export BORG_BASE_DIR=\"${BASE_FOLDER}\";borg [COMMAND] ${OPT_REMOTE} ${REPOSITORY}::[BACKUP] [PATH]";
+		echo "Replace [COMMAND] with list for listing or extract for restoring backup data."
+		echo "Replace [BACKUP] with archive name."
+		echo "If no [PATH] is given then all files will be restored."
+		echo "Before extracting -n (dry run) is recommended to use."
+		echo "When listing (list) data the --format command can be used."
+		echo "Example: \"{mode} {user:6} {group:6} {size:8d} {csize:8d} {dsize:8d} {dcsize:8d} {mtime} {path}{extra} [{health}]{NL}\""
+	else
+		echo "export BORG_BASE_DIR=\"${BASE_FOLDER}\";borg [COMMAND] ${OPT_REMOTE} [FORMAT] ${REPOSITORY}::[BACKUP] [PATH]";
+	fi;
+	exit;
 fi;
 
 # folders to backup
