@@ -19,7 +19,7 @@ cleanup() {
 trap "unset BORG_BASE_DIR BORG_UNKNOWN_UNENCRYPTED_REPO_ACCESS_IS_OK BORG_RELOCATED_REPO_ACCESS_IS_OK" EXIT;
 
 # set last edit date + time
-VERSION="20211014-0952";
+VERSION="20211014-1014";
 # default log folder if none are set in config or option
 _LOG_FOLDER="/var/log/borg.backup/";
 # log file name is set based on BACKUP_FILE, .log is added
@@ -552,6 +552,7 @@ if [ ${PRINT} -eq 1 ]; then
 		echo "Replace [BACKUP] with archive name."
 		echo "If no [PATH] is given then all files will be restored."
 		echo "Before extracting -n (dry run) is recommended to use."
+		echo "If archive size is needed the info command with archive name has to be used."
 		echo "When listing (list) data the --format command can be used."
 		echo "Example: \"{mode} {user:6} {group:6} {size:8d} {csize:8d} {dsize:8d} {dcsize:8d} {mtime} {path}{extra} [{health}]{NL}\""
 	else
