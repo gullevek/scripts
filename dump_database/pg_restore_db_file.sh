@@ -142,17 +142,16 @@ NUMBER_REGEX="^[0-9]{1,}$";
 # find the max allowed jobs based on the cpu count
 # because setting more than this is not recommended
 # so this fails in vmware hosts were we have random cpus assigned
-#cpu=$(cat /proc/cpuinfo | grep processor|tail -n 1);
 cpu=$(cat /proc/cpuinfo | grep "processor" | wc -l);
-_max_jobs=$[ ${cpu##*: }+1 ]
+_max_jobs=${cpu##*: };
 # if the MAX_JOBS is not number or smaller 1 or greate _max_jobs
 if [ ! -z "${MAX_JOBS}" ]; then
 	# check that it is a valid number
-	if [[ ! "$MAX_JOBS" =~ "$NUMBER_REGEX" ]]; then
+	if [[ ! ${MAX_JOBS} =~ ${NUMBER_REGEX} ]]; then
 		echo "Please enter a number for the -j option";
 		exit 1;
 	fi;
-	if [ "${MAX_JOBS}" -lt 1 ] || [ "${MAX_JOBS}" -gt 1 ]; then
+	if [ ${MAX_JOBS} -lt 1 ] || [ ${MAX_JOBS} -gt ${_max_jobs} ]; then
 		echo "The value for the jobs option -j cannot be smaller than 1 or bigger than ${_max_jobs}";
 		exit 1;
 	fi;
@@ -367,7 +366,7 @@ for file in $DUMP_FOLDER/*.sql; do
 	fi;
 	# override encoding (dangerous)
 	# check if we have a master override
-	if [ ! "$encoding" ] then
+	if [ ! "$encoding" ]; then
 		set_encoding=$encoding;
 	fi;
 	# if no override encoding set first from file, then from global
