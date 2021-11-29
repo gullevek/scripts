@@ -724,7 +724,7 @@ if [ $FOLDER_OK -eq 1 ]; then
 	else
 		# need to redirect std error to std out so all data is printed to the correct pipe
 		# for the IFS="#" to work we need to replace options spaces with exactly ONE #
-		$(echo "${COMMAND}" | sed -e 's/[ ][ ]*/#/g') ${FOLDERS[*]} 2>&1 || echo "[!] Attic backup aborted.";
+		$(echo "${COMMAND}" | sed -e 's/[ ][ ]*/#/g') ${FOLDERS[*]} 2>&1 || echo "[!] Borg backup aborted.";
 	fi;
 	# remove the temporary exclude file if it exists
 	if [ -f "${TMP_EXCLUDE_FILE}" ]; then
@@ -744,7 +744,7 @@ if [ ${DEBUG} -eq 1 ]; then
 	echo "${COMMAND//#/ }" | sed -e 's/[ ][ ]*/ /g';
 fi;
 # for the IFS="#" to work we need to replace options spaces with exactly ONE #
-$(echo "${COMMAND}" | sed -e 's/[ ][ ]*/#/g') 2>&1 || echo "[!] Attic prune aborted";
+$(echo "${COMMAND}" | sed -e 's/[ ][ ]*/#/g') 2>&1 || echo "[!] Borg prune aborted";
 
 echo "=== [END  : $(date +'%F %T')] ============================================>";
 

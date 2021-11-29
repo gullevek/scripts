@@ -420,13 +420,14 @@ else
 	fi;
 	# SEQUENCE RESET DATA COLLECTION
 	echo "Resetting all sequences from DB $database [$_host:$_port] @ `date +"%F %T"`";
+	reset_query="SELECT 'SELECT SETVAL(' ||quote_literal(S.relname)|| ', MAX(' ||quote_ident(C.attname)|| ') ) FROM ' ||quote_ident(T.relname)|| ';' FROM pg_class AS S, pg_depend AS D, pg_class AS T, pg_attribute AS C WHERE S.relkind = 'S' AND S.oid = D.objid AND D.refobjid = T.oid AND D.refobjid = C.attrelid AND D.refobjsubid = C.attnum ORDER BY S.relname;";
 	if [ $DRY_RUN -eq 0 ]; then
-		echo "SELECT 'SELECT SETVAL(' ||quote_literal(S.relname)|| ', MAX(' ||quote_ident(C.attname)|| ') ) FROM ' ||quote_ident(T.relname)|| ';' FROM pg_class AS S, pg_depend AS D, pg_class AS T, pg_attribute AS C WHERE S.relkind = 'S' AND S.oid = D.objid AND D.refobjid = T.oid AND D.refobjid = C.attrelid AND D.refobjsubid = C.attnum ORDER BY S.relname;" | $PG_PSQL -U $owner -Atq $host $port -o $TEMP_FILE $database
-		$PG_PSQL -U $owner $host $port -e -f $TEMP_FILE $database 1>output_sequence.$LOG_FILE_EXT 2>errors_sequence.$database.$LOG_FILE_EXT;
+		echo "${reset_query}" | $PG_PSQL -U postgres -Atq $host $port -o $TEMP_FILE $database
+		$PG_PSQL -U postgres $host $port -e -f $TEMP_FILE $database 1>output_sequence.$LOG_FILE_EXT 2>errors_sequence.$database.$LOG_FILE_EXT;
 		rm $TEMP_FILE;
 	else
-		echo "SELECT 'SELECT SETVAL(' ||quote_literal(S.relname)|| ', MAX(' ||quote_ident(C.attname)|| ') ) FROM ' ||quote_ident(T.relname)|| ';' FROM pg_class AS S, pg_depend AS D, pg_class AS T, pg_attribute AS C WHERE S.relkind = 'S' AND S.oid = D.objid AND D.refobjid = T.oid AND D.refobjid = C.attrelid AND D.refobjsubid = C.attnum ORDER BY S.relname;";
-		echo $PG_PSQL -U $owner $host $port -e -f $TEMP_FILE $database 1>output_sequence.$LOG_FILE_EXT 2>errors_sequence.$database.$LOG_FILE_EXT;
+		echo "${reset_query}";
+		echo $PG_PSQL -U postgres $host $port -e -f $TEMP_FILE $database 1>output_sequence.$LOG_FILE_EXT 2>errors_sequence.$database.$LOG_FILE_EXT;
 	fi;
 	echo "Restore of data $file for DB $database [$_host:$_port] finished";
 	DURATION=$[ `date +'%s'`-$START ];
